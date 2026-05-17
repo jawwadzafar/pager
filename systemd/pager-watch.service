@@ -1,0 +1,9 @@
+[Unit]
+Description=pager: watchdog tick — log session state and restart if dead
+Documentation=https://github.com/jawwadzafar/pager
+After=pager.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/pager/bin/pager watchdog claude
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin

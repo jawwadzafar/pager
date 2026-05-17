@@ -1,0 +1,14 @@
+[Unit]
+Description=pager: run watchdog every minute
+Documentation=https://github.com/jawwadzafar/pager
+
+[Timer]
+# Wait 2 min after boot so pager.service has settled and Remote Control has
+# had time to register with claude.ai before we start judging health.
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Unit=pager-watch.service
+
+[Install]
+WantedBy=timers.target

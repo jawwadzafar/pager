@@ -1,0 +1,14 @@
+[Unit]
+Description=pager: persistent Claude Code session over Remote Control
+Documentation=https://github.com/jawwadzafar/pager
+After=default.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=%h/pager/bin/pager start claude
+ExecStop=%h/pager/bin/pager stop claude
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target

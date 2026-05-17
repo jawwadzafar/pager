@@ -1,0 +1,23 @@
+# Server inventory consumed by `ssh-to` and `server-action`.
+# Secrets MUST stay in ~/.env. Reference them here by env-var name only.
+#
+# Schema per host:
+#   host:         IP or DNS name (required)
+#   user:         remote username (default: current user)
+#   port:         SSH port (default: 22)
+#   key:          path to private key (preferred over password)
+#   password_env: name of env var in ~/.env holding the password (use only if no key)
+#   tags:         optional list of free-form labels
+
+hosts: {}
+  # example:
+  #   host: <box-ip-or-dns>
+  #   user: youruser
+  #   key: ~/.ssh/id_ed25519
+  #   tags: [home, lan]
+  #
+  # legacy-box:
+  #   host: legacy.internal
+  #   user: root
+  #   port: 2222
+  #   password_env: LEGACY_SSH_PASS

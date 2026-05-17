@@ -1,0 +1,497 @@
+#!/usr/bin/env bash
+# pager — persistent remote-session toolkit for Claude Code
+# Single binary with subcommands. Run `pager` or `pager help` for the list.
+set -euo pipefail
+
+# Resolve our own location even when invoked through a symlink (e.g. when
+# `make install` symlinks bin/pager into ~/.local/bin or /usr/local/bin).
+__PAGER_BIN_REAL="$(readlink -f "$0" 2>/dev/null || {
+  __t="$0"; while [ -L "$__t" ]; do
+    __t="$(cd "$(dirname "$__t")" && pwd)/$(readlink "$__t")"
+  done; echo "$__t"; })"
+__PAGER_ROOT="${PAGER_ROOT:-$(cd "$(dirname "$__PAGER_BIN_REAL")/.." && pwd)}"
+[ -f "$__PAGER_ROOT/.env" ] && set -a && . "$__PAGER_ROOT/.env" && set +a
+
+# ─── ansi helpers ────────────────────────────────────────────────────────────
+bold()   { printf '\033[1m%s\033[0m' "$*"; }
+dim()    { printf '\033[2m%s\033[0m' "$*"; }
+red()    { printf '\033[31m%s\033[0m' "$*"; }
+green()  { printf '\033[32m%s\033[0m' "$*"; }
+yellow() { printf '\033[33m%s\033[0m' "$*"; }
+
+err()     { echo "$(red ERROR): $*" >&2; exit 1; }
+require() { command -v "$1" >/dev/null || err "$1 not installed"; }
+
+# ─── start: launch a session ────────────────────────────────────────────────
+cmd_start() {
+  require tmux
+  local session="${1:-claude}"
+  shift || true
+  [ "${1-}" = "--" ] && shift || true
+
+  if tmux has-session -t "$session" 2>/dev/null; then
+    echo "Session '$session' already running. Attach: pager attach $session"
+    return 0
+  fi
+
+  local log="$__PAGER_ROOT/logs/$session.log"
+  mkdir -p "$(dirname "$log")"
+
+  local claude_cmd="claude --dangerously-skip-permissions"
+  if [ -z "${PAGER_NO_REMOTE:-}" ]; then
+    claude_cmd+=" --remote-control $(printf '%q' "$session")"
+  fi
+  for arg in "$@"; do
+    claude_cmd+=" $(printf '%q' "$arg")"
+  done
+
+  tmux new-session -d -s "$session" -c "$HOME" \
+    "$claude_cmd; echo; echo '[claude exited — tmux session kept; run claude to relaunch]'; exec bash"
+  tmux pipe-pane -t "$session":0.0 -o "cat >> '$log'"
+
+  echo "Started session '$session'."
+  echo "  Attach: pager attach $session"
+  echo "  Log:    $log"
+  echo "  URL:    pager url $session"
+}
+
+# ─── attach: attach terminal to a session ──────────────────────────────────
+cmd_attach() {
+  require tmux
+  local session="${1:-claude}"
+  exec tmux attach -t "$session"
+}
+
+# ─── stop: kill a session ──────────────────────────────────────────────────
+cmd_stop() {
+  require tmux
+  if [ "${1-}" = "--all" ]; then
+    tmux ls 2>/dev/null | awk -F: '{print $1}' | while read -r s; do
+      tmux kill-session -t "$s" && echo "Killed: $s"
+    done
+    return 0
+  fi
+  local session="${1:-claude}"
+  if tmux has-session -t "$session" 2>/dev/null; then
+    tmux kill-session -t "$session"
+    echo "Killed session '$session'."
+  else
+    echo "No session '$session' running."
+  fi
+}
+
+# ─── status: list running sessions ─────────────────────────────────────────
+cmd_status() {
+  if ! command -v tmux >/dev/null; then
+    echo "tmux not installed."
+    return
+  fi
+  local sessions
+  sessions="$(tmux ls -F '#{session_name}' 2>/dev/null || true)"
+  if [ -z "$sessions" ]; then
+    echo "No tmux sessions running."
+    return
+  fi
+
+  # Format: NAME | CLAUDE | AGE | URL
+  printf '%-16s %-7s %-10s %s\n' "NAME" "CLAUDE" "AGE" "REMOTE CONTROL URL"
+  printf '%-16s %-7s %-10s %s\n' "----" "------" "---" "------------------"
+  local s pane_pid claude_pid age_disp claude_disp url
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    pane_pid="$(tmux list-panes -t "$s":0 -F '#{pane_pid}' 2>/dev/null | head -1 || true)"
+    claude_pid=""
+    [ -n "$pane_pid" ] && claude_pid="$(pgrep -P "$pane_pid" 2>/dev/null | head -1 || true)"
+    if [ -n "$claude_pid" ]; then
+      claude_disp="alive"
+      age_disp="$(ps -o etime= -p "$claude_pid" 2>/dev/null | tr -d ' ' || echo '-')"
+    else
+      claude_disp="DEAD"
+      age_disp="-"
+    fi
+    url="$(tmux capture-pane -t "$s":0 -p -S - 2>/dev/null \
+           | grep -oE 'https://claude\.ai/code/session_[A-Za-z0-9]+' \
+           | tail -1 || true)"
+    [ -n "$url" ] || url="(no remote-control URL)"
+    printf '%-16s %-7s %-10s %s\n' "$s" "$claude_disp" "$age_disp" "$url"
+  done <<< "$sessions"
+
+  echo
+  echo "Attach: pager attach <name>   ·   URL only: pager url [<name>|--all]"
+}
+
+# ─── url: print claude.ai Remote Control URL for a session ─────────────────
+cmd_url() {
+  require tmux
+  url_for() {
+    local s="$1"
+    tmux has-session -t "$s" 2>/dev/null || { printf '%-20s %s\n' "[$s]" "no session"; return; }
+    local url
+    url=$(tmux capture-pane -t "$s":0 -p -S - 2>/dev/null \
+          | grep -oE 'https://claude\.ai/code/session_[A-Za-z0-9]+' \
+          | head -1 || true)
+    if [ -n "$url" ]; then
+      printf '%-20s %s\n' "[$s]" "$url"
+    else
+      printf '%-20s %s\n' "[$s]" "(no Remote Control URL — started without --remote-control?)"
+    fi
+  }
+  if [ "${1-}" = "--all" ]; then
+    tmux ls 2>/dev/null | awk -F: '{print $1}' | while read -r s; do url_for "$s"; done
+  else
+    url_for "${1:-claude}"
+  fi
+}
+
+# ─── watchdog: one-tick health check + auto-restart of a session ───────────
+# Designed to be called by a systemd user timer every ~60s. Idempotent: if the
+# session is healthy it just appends a 'noop' row to logs/watch.csv and exits.
+#
+# Health signals:
+#   tmux_alive       — tmux has the named session
+#   claude_pid       — a claude process matching the session is running
+#   rc_banner_seen   — recent pane output contains 'Remote Control active' or
+#                      a 'https://claude.ai/code/session_…' URL
+#
+# Action policy (intentionally conservative for v1):
+#   - Claude process dead → kill stale tmux session if any, then cmd_start.
+#   - Claude process alive but rc_banner missing → log only. We don't yet
+#     know whether banner-missing always means a dead Remote Control link
+#     (it could just have scrolled off the captured window). Once watch.csv
+#     captures real expiry events, refine the policy.
+cmd_watchdog() {
+  require tmux
+  local session="${1:-claude}"
+
+  local csv="$__PAGER_ROOT/logs/watch.csv"
+  mkdir -p "$(dirname "$csv")"
+  if [ ! -s "$csv" ]; then
+    echo "timestamp,session,tmux_alive,claude_pid,rc_banner_seen,age_sec,action" > "$csv"
+  fi
+
+  local ts tmux_alive=false pane_pid="" claude_pid="" rc_banner=false age_sec="" action="noop"
+  ts="$(date -Iseconds)"
+
+  if tmux has-session -t "$session" 2>/dev/null; then
+    tmux_alive=true
+    pane_pid="$(tmux list-panes -t "$session":0 -F '#{pane_pid}' 2>/dev/null | head -1 || true)"
+  fi
+
+  # The wrapper bash that tmux spawned holds the original `claude …` argv
+  # forever, so `pgrep -f claude` finds it even after claude exits. The
+  # reliable signal is: does pane_pid have a running direct child? The
+  # wrapper's `;`-chain runs `claude` as a child; once claude exits, the
+  # chain runs `echo; exec bash` and the wrapper has no children until the
+  # user spawns one. So "no child of pane_pid" == "claude is dead".
+  if [ -n "$pane_pid" ]; then
+    claude_pid="$(pgrep -P "$pane_pid" 2>/dev/null | head -1 || true)"
+  fi
+
+  if [ -n "$claude_pid" ]; then
+    age_sec="$(ps -o etimes= -p "$claude_pid" 2>/dev/null | tr -d ' ' || true)"
+  fi
+
+  if [ "$tmux_alive" = true ]; then
+    if tmux capture-pane -t "$session":0 -p -S -200 2>/dev/null \
+       | grep -qE 'Remote Control active|https://claude\.ai/code/session_'; then
+      rc_banner=true
+    fi
+  fi
+
+  if [ -z "$claude_pid" ]; then
+    action="restart"
+    if [ "$tmux_alive" = true ]; then
+      tmux kill-session -t "$session" 2>/dev/null || true
+    fi
+    # Re-launch via cmd_start; it handles tmux + logging + remote-control flag.
+    cmd_start "$session" >/dev/null 2>&1 || action="restart-failed"
+  fi
+
+  printf '%s,%s,%s,%s,%s,%s,%s\n' \
+    "$ts" "$session" "$tmux_alive" "${claude_pid:-}" "$rc_banner" "${age_sec:-}" "$action" \
+    >> "$csv"
+}
+
+# ─── ssh: SSH to inventory host with creds from .env ───────────────────────
+cmd_ssh() {
+  local alias="${1:?Usage: pager ssh <host-alias> [command]}"
+  shift || true
+
+  local inv="${PAGER_INVENTORY:-$__PAGER_ROOT/inventory.yaml}"
+  [ -f "$inv" ] || err "Inventory not found: $inv"
+
+  require python3
+
+  eval "$(python3 - "$alias" "$inv" <<'PY'
+import sys, yaml, shlex
+alias, inv = sys.argv[1], sys.argv[2]
+with open(inv) as f:
+    data = yaml.safe_load(f) or {}
+hosts = data.get('hosts') or {}
+h = hosts.get(alias)
+if not h:
+    print(f"echo 'Unknown host: {alias}' >&2; exit 2")
+    sys.exit(0)
+for k in ('host', 'user', 'port', 'key', 'password_env'):
+    v = h.get(k, '') or ''
+    print(f"H_{k.upper()}={shlex.quote(str(v))}")
+PY
+)"
+
+  H_PORT="${H_PORT:-22}"
+  H_USER="${H_USER:-$(whoami)}"
+  [ -n "$H_HOST" ] || err "Host '$alias' has no 'host' field"
+
+  local opts=(-o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -p "$H_PORT")
+
+  if [ -n "$H_KEY" ]; then
+    opts+=(-i "${H_KEY/#\~/$HOME}" -o IdentitiesOnly=yes)
+    exec ssh "${opts[@]}" "$H_USER@$H_HOST" "$@"
+  fi
+
+  if [ -n "$H_PASSWORD_ENV" ]; then
+    local pass="${!H_PASSWORD_ENV:-}"
+    [ -n "$pass" ] || err "Env var \$$H_PASSWORD_ENV is empty. Set it in .env."
+    require sshpass
+    SSHPASS="$pass" exec sshpass -e ssh "${opts[@]}" "$H_USER@$H_HOST" "$@"
+  fi
+
+  exec ssh "${opts[@]}" "$H_USER@$H_HOST" "$@"
+}
+
+# ─── run: run an action script on a remote host ────────────────────────────
+cmd_run() {
+  local alias="${1:?Usage: pager run <host-alias> <action> [-- args...]}"
+  local action="${2:?Usage: pager run <host-alias> <action> [-- args...]}"
+  shift 2
+  [ "${1-}" = "--" ] && shift || true
+
+  local actions_dir="${PAGER_ACTIONS_DIR:-$__PAGER_ROOT/actions}"
+  local script="$actions_dir/$action.sh"
+
+  if [ ! -f "$script" ]; then
+    echo "Action '$action' not found at $script" >&2
+    echo "Available:" >&2
+    for f in "$actions_dir"/*.sh; do
+      [ -e "$f" ] || continue
+      printf '  %s\n' "$(basename "$f" .sh)" >&2
+    done
+    return 2
+  fi
+
+  exec "$__PAGER_ROOT/bin/pager" ssh "$alias" bash -s -- "$@" < "$script"
+}
+
+# ─── doctor: self-diagnostic ───────────────────────────────────────────────
+# Runs a battery of checks and reports each as pass / warn / fail with a
+# one-line hint when something is wrong. Designed to be the first thing a
+# user runs when "it isn't working". Exit code: 0 if all pass, 1 if any fail.
+cmd_doctor() {
+  local fails=0 warns=0
+
+  pass() { printf '  %s %s\n' "$(green ✓)" "$1"; }
+  warn() { printf '  %s %s\n'   "$(yellow !)" "$1"; [ -n "${2-}" ] && printf '      %s %s\n' "$(dim '↳')" "$2"; warns=$((warns+1)); }
+  fail() { printf '  %s %s\n'   "$(red ✗)" "$1";    [ -n "${2-}" ] && printf '      %s %s\n' "$(dim '↳')" "$2"; fails=$((fails+1)); }
+
+  printf '%s\n\n' "$(bold "pager doctor") $(dim "— $__PAGER_ROOT")"
+
+  # ── 1. core deps ────────────────────────────────────────────────────────
+  printf '%s\n' "$(bold 'Dependencies')"
+  if command -v tmux >/dev/null;     then pass "tmux $(tmux -V | awk '{print $2}')"; else fail "tmux not installed" "apt install tmux"; fi
+  if command -v claude >/dev/null;   then pass "claude $(claude --version 2>/dev/null | awk '{print $1}' | head -1)";
+     else warn "claude not on PATH" "Install Claude Code CLI: https://claude.com/code"; fi
+  if command -v python3 >/dev/null;  then pass "python3 $(python3 -V 2>&1 | awk '{print $2}')"; else warn "python3 missing" "needed for 'pager ssh' inventory parsing"; fi
+
+  # ── 2. PATH resolution / collision ──────────────────────────────────────
+  printf '\n%s\n' "$(bold 'Install & PATH')"
+  local pager_in_path real_pager
+  pager_in_path="$(command -v pager 2>/dev/null || true)"
+  if [ -z "$pager_in_path" ]; then
+    fail "'pager' is not on PATH" "Re-run bootstrap.sh, or symlink: ln -s $__PAGER_ROOT/bin/pager ~/.local/bin/pager"
+  else
+    real_pager="$(readlink -f "$pager_in_path" 2>/dev/null || echo "$pager_in_path")"
+    if [ "$real_pager" = "$__PAGER_ROOT/bin/pager" ]; then
+      pass "'pager' resolves to $pager_in_path → this repo"
+    elif [ "$pager_in_path" = "/usr/bin/pager" ] || [ "$pager_in_path" = "/usr/sbin/pager" ]; then
+      fail "'pager' resolves to $pager_in_path (Debian BSD-pager / less alias)" \
+           "Add ~/.local/bin to PATH before /usr/bin, or run bootstrap.sh"
+    else
+      warn "'pager' resolves to $pager_in_path (not this repo)" \
+           "Expected $__PAGER_ROOT/bin/pager — multiple installs?"
+    fi
+  fi
+
+  # ── 3. .env perms ───────────────────────────────────────────────────────
+  printf '\n%s\n' "$(bold 'Secrets')"
+  if [ -f "$__PAGER_ROOT/.env" ]; then
+    local mode
+    mode="$(stat -c '%a' "$__PAGER_ROOT/.env" 2>/dev/null || echo '?')"
+    if [ "$mode" = "600" ]; then
+      pass ".env perms 600"
+    else
+      fail ".env perms are $mode (want 600)" "chmod 600 $__PAGER_ROOT/.env"
+    fi
+  else
+    warn ".env missing" "cp $__PAGER_ROOT/.env.example $__PAGER_ROOT/.env && chmod 600 $__PAGER_ROOT/.env"
+  fi
+
+  # ── 4. claude.json trust flag ───────────────────────────────────────────
+  printf '\n%s\n' "$(bold 'Claude Code workspace trust')"
+  if [ -f "$HOME/.claude.json" ] && command -v python3 >/dev/null; then
+    local trust
+    trust="$(python3 - <<'PY' 2>/dev/null
+import json, os
+try:
+    with open(os.path.expanduser('~/.claude.json')) as f: d = json.load(f)
+    print('true' if d.get('projects', {}).get(os.path.expanduser('~'), {}).get('hasTrustDialogAccepted') else 'false')
+except Exception:
+    print('error')
+PY
+)"
+    case "$trust" in
+      true)  pass "\$HOME pre-trusted in ~/.claude.json (autostart safe)" ;;
+      false) fail "\$HOME not trusted in ~/.claude.json" "Re-run bootstrap.sh — step 5 fixes this" ;;
+      *)     warn "couldn't read ~/.claude.json" "manual check: jq '.projects.\"'\$HOME'\"' ~/.claude.json" ;;
+    esac
+  else
+    # shellcheck disable=SC2088  # ~/.claude.json shown literally to user
+    warn "~/.claude.json not found" "First-run claude will create it; bootstrap.sh pre-trusts \$HOME"
+  fi
+
+  # ── 5. systemd services ─────────────────────────────────────────────────
+  printf '\n%s\n' "$(bold 'Services')"
+  local svc_state timer_state
+  if systemctl --user list-unit-files pager.service 2>/dev/null | grep -q '^pager.service'; then
+    svc_state="$(systemctl --user is-active pager.service 2>/dev/null || true)"
+    case "$svc_state" in
+      active) pass "pager.service: active" ;;
+      *)      fail "pager.service: $svc_state" "systemctl --user start pager.service" ;;
+    esac
+  else
+    warn "pager.service not installed" "make service  (or re-run bootstrap.sh)"
+  fi
+  if systemctl --user list-unit-files pager-watch.timer 2>/dev/null | grep -q '^pager-watch.timer'; then
+    timer_state="$(systemctl --user is-active pager-watch.timer 2>/dev/null || true)"
+    case "$timer_state" in
+      active) pass "pager-watch.timer: active" ;;
+      *)      warn "pager-watch.timer: $timer_state" "systemctl --user enable --now pager-watch.timer" ;;
+    esac
+  else
+    warn "pager-watch.timer not installed" "make watchdog  (or re-run bootstrap.sh)"
+  fi
+  if [ "$(loginctl show-user "$USER" -p Linger 2>/dev/null | cut -d= -f2)" = "yes" ]; then
+    pass "linger enabled (services start at boot)"
+  else
+    warn "linger not enabled — services won't start until first login" "sudo loginctl enable-linger \$USER"
+  fi
+
+  # ── 6. watchdog freshness ───────────────────────────────────────────────
+  printf '\n%s\n' "$(bold 'Watchdog state')"
+  local csv="$__PAGER_ROOT/logs/watch.csv"
+  if [ -s "$csv" ]; then
+    local last_ts now_epoch last_epoch age
+    last_ts="$(tail -1 "$csv" | cut -d, -f1)"
+    last_epoch="$(date -d "$last_ts" +%s 2>/dev/null || echo 0)"
+    now_epoch="$(date +%s)"
+    age=$(( now_epoch - last_epoch ))
+    if [ "$age" -lt 120 ]; then
+      pass "last watchdog tick ${age}s ago"
+    elif [ "$age" -lt 600 ]; then
+      warn "last watchdog tick ${age}s ago (timer interval is 60s — running late)"
+    else
+      fail "last watchdog tick ${age}s ago (timer stalled?)" "systemctl --user status pager-watch.timer"
+    fi
+    local non_noop
+    non_noop="$(awk -F, 'NR>1 && $7 != "noop" { n++ } END { print n+0 }' "$csv")"
+    if [ "$non_noop" -gt 0 ]; then
+      warn "$non_noop non-noop event(s) in watch.csv" "grep -v ',noop\$' $csv"
+    fi
+  else
+    warn "no watchdog history yet" "Timer takes ~2 min to fire after install"
+  fi
+
+  # ── 7. sessions ─────────────────────────────────────────────────────────
+  printf '\n%s\n' "$(bold 'Sessions')"
+  if command -v tmux >/dev/null && tmux ls 2>/dev/null | grep -q .; then
+    tmux ls 2>/dev/null | sed 's/^/  /'
+  else
+    warn "no tmux sessions running" "pager start"
+  fi
+
+  # ── verdict ─────────────────────────────────────────────────────────────
+  echo
+  if [ "$fails" -eq 0 ] && [ "$warns" -eq 0 ]; then
+    printf '%s\n' "$(green '✓ all checks passed')"
+    return 0
+  elif [ "$fails" -eq 0 ]; then
+    printf '%s warnings: %d (non-fatal)\n' "$(yellow '!')" "$warns"
+    return 0
+  else
+    printf '%s failures: %d   warnings: %d\n' "$(red '✗')" "$fails" "$warns"
+    return 1
+  fi
+}
+
+# ─── help: print the usage menu ────────────────────────────────────────────
+cmd_help() {
+  cat <<EOF
+$(bold "pager") $(dim "— persistent remote-session toolkit for Claude Code")
+
+$(bold "Usage:")  pager $(dim "<command>") $(dim "[args]")
+
+$(bold "Session commands")
+  $(bold "start")  $(dim "[name]")             start a tmux session (default 'claude') running
+                              claude --remote-control + bypass perms
+  $(bold "attach") $(dim "[name]")             attach terminal to <name> ($(dim "detach: Ctrl-b d"))
+  $(bold "stop")   $(dim "[name|--all]")       kill one session or all
+  $(bold "status")                     list running tmux sessions
+  $(bold "url")    $(dim "[name|--all]")       print phone-accessible claude.ai URL(s)
+  $(bold "watchdog") $(dim "[name]")           one-tick health check; restart session if dead.
+                              Run every minute via the pager-watch user timer.
+                              Appends a row to logs/watch.csv each tick.
+  $(bold "doctor")                     self-diagnostic: PATH, trust flag, services,
+                              watchdog freshness, .env perms. Exits non-zero if any
+                              check fails. First thing to run when things look off.
+
+$(bold "Remote ops")
+  $(bold "ssh")    $(dim "<alias> [cmd]")      SSH to a host from inventory.yaml using creds from .env
+  $(bold "run")    $(dim "<alias> <action>")   run actions/<action>.sh on a remote host
+
+$(bold "Other")
+  $(bold "help")                       this message
+
+$(bold "Env overrides")
+  PAGER_NO_REMOTE=1 pager start sandbox   $(dim "# skip --remote-control (local only)")
+  PAGER_INVENTORY, PAGER_ACTIONS_DIR      $(dim "# point at non-default locations")
+
+$(bold "Files")
+  Inventory:  $__PAGER_ROOT/inventory.yaml
+  Actions:    $__PAGER_ROOT/actions/
+  Logs:       $__PAGER_ROOT/logs/
+  Secrets:    $__PAGER_ROOT/.env  $(dim "(chmod 600, gitignored)")
+
+$(bold "Service")
+  systemctl --user status pager.service       $(dim "# autostart unit")
+  journalctl --user -u pager.service          $(dim "# service logs")
+  systemctl --user status pager-watch.timer   $(dim "# watchdog timer")
+  $__PAGER_ROOT/logs/watch.csv                $(dim "# watchdog state log")
+
+$(bold "Docs:")  $__PAGER_ROOT/README.md, $__PAGER_ROOT/CLAUDE.md
+$(bold "Repo:")  github.com/jawwadzafar/pager $(dim "(MIT)")
+EOF
+}
+
+# ─── dispatch ──────────────────────────────────────────────────────────────
+case "${1-}" in
+  start|bg)            shift; cmd_start "$@" ;;
+  attach)              shift; cmd_attach "$@" ;;
+  stop)                shift; cmd_stop "$@" ;;
+  status|ls)           shift; cmd_status "$@" ;;
+  url)                 shift; cmd_url "$@" ;;
+  watchdog)            shift; cmd_watchdog "$@" ;;
+  doctor|check)        shift; cmd_doctor "$@" ;;
+  ssh)                 shift; cmd_ssh "$@" ;;
+  run)                 shift; cmd_run "$@" ;;
+  help|--help|-h|"")   cmd_help ;;
+  *)                   echo "$(red "Unknown subcommand:") $1" >&2; cmd_help >&2; exit 1 ;;
+esac
