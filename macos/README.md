@@ -31,6 +31,37 @@ The script is **idempotent** — safe to re-run any time. It only does work that
 
 After bootstrap finishes, open a new terminal (or run `source ~/.zprofile && source ~/.zshrc`) and you should be able to run `pager`, `pager url`, etc.
 
+## Permissions you'll be asked for
+
+macOS gates a few things behind dialogs that the script can't suppress (and shouldn't — they're how the OS keeps you in control). Here's what you'll see and what to do.
+
+### During first install
+
+| Prompt | Where | What it's for | If you click… |
+|---|---|---|---|
+| **"Enter your password to install Xcode CLT"** *(only if `git` / clang aren't already present)* | Terminal / GUI | Homebrew needs the Command Line Tools (git, clang, make). | **Allow & install.** Without it, `brew` itself can't run. Re-run `./macos/bootstrap.sh` after CLT finishes installing. |
+| **"Password:"** (sudo, in Terminal) | Terminal | The Homebrew installer creates `/opt/homebrew` (or `/usr/local`) which needs root. Only happens once on a fresh Mac. | Type your **Mac login password.** If you cancel, brew install bails out. Re-run the script. |
+| **"`/opt/homebrew` is not writable" warning** | Terminal | Sometimes appears on Macs with old brew installs. Bootstrap ignores it as long as `brew` is on PATH. | Usually safe to ignore; if `brew install` later fails, run `sudo chown -R "$(whoami)" /opt/homebrew`. |
+
+No further OS-level dialogs from the script itself — every other step is **user-scope**: brew packages, `pip3 install --user`, writing to `~/Library/LaunchAgents/`, and `launchctl bootstrap gui/$(id -u)` all run as you.
+
+### After the LaunchAgents are loaded
+
+On macOS Ventura+ (Tahoe is fine here), the OS shows an informational notification when a new background item is installed — typically titled something like **"Background item added"**. **This is not a deny/allow prompt** — it's a heads-up. You can ignore it; pager keeps working.
+
+If you click into that notification (or open **System Settings → General → Login Items & Extensions**), you'll see `pager` listed under **Allow in the Background**. The toggle defaults to **on**. **Don't turn it off** — that's the macOS-side kill-switch for the LaunchAgents.
+
+### If you accidentally denied something
+
+| What you denied | Symptom | How to recover |
+|---|---|---|
+| Xcode CLT install | `brew: command not found`, or step 1 of bootstrap warns Homebrew didn't install | Run `xcode-select --install` manually, then re-run `./macos/bootstrap.sh`. |
+| Mac password to Homebrew | Bootstrap exits at step 1 | Re-run `./macos/bootstrap.sh` — type the password this time. |
+| Background Items toggle (turned `pager` off) | `pager doctor` reports `com.pager.session: not loaded`; tmux session disappears at next login | System Settings → General → Login Items & Extensions → scroll to **Allow in the Background** → toggle `pager` back on. Or just re-run `./macos/bootstrap.sh` (idempotent — it does `bootout` + `bootstrap` which re-registers cleanly). |
+| Network access to claude (Little Snitch / Lulu users) | Claude can't reach claude.ai; no Remote Control URL appears | Allow `claude` outbound to `*.claude.ai` and `*.anthropic.com` in your firewall app. |
+
+Pager itself never asks for Full Disk Access, Accessibility, Screen Recording, or any other TCC permission — none of its features need them. If you see a prompt naming one of those, something else on your Mac is asking (it's almost certainly not pager). Deny and report.
+
 ## What works
 
 | Command | Status |
