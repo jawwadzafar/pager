@@ -1,8 +1,8 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # pager installer — one-line install for Linux + macOS.
 #
 # Usage:
-#   curl -fsSL https://jawwadzafar.github.io/pager/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh
 #
 # Or from a fresh clone:
 #   ./install.sh
@@ -10,22 +10,25 @@
 # Env overrides:
 #   PAGER_HOME    — where to clone the repo (default: ~/.pager)
 #   PAGER_BRANCH  — branch / tag / sha to checkout (default: main)
+#                   pin to a release: PAGER_BRANCH=v0.4.1 …
 #   PAGER_REPO    — git URL (default: https://github.com/jawwadzafar/pager.git)
 #
-# This script lives in two places:
-#   /install.sh           — canonical (here)
-#   /docs/install.sh      — published copy served by GitHub Pages
-# Use `make sync-installer` to copy the canonical one to docs/.
-set -euo pipefail
+# POSIX sh-compatible — runs cleanly under bash, dash, ash, zsh's sh.
+set -eu
 
 REPO="${PAGER_REPO:-https://github.com/jawwadzafar/pager.git}"
 BRANCH="${PAGER_BRANCH:-main}"
 TARGET="${PAGER_HOME:-$HOME/.pager}"
 
-# ── colors (terminal only) ──
+# ── colors (terminal only; POSIX-friendly — no $'\033' bashism) ──
 if [ -t 1 ]; then
-  c_cyan=$'\033[1;36m'; c_green=$'\033[32m'
-  c_yellow=$'\033[33m'; c_red=$'\033[31m'; c_dim=$'\033[2m'; c_reset=$'\033[0m'
+  esc=$(printf '\033')
+  c_cyan="${esc}[1;36m"
+  c_green="${esc}[32m"
+  c_yellow="${esc}[33m"
+  c_red="${esc}[31m"
+  c_dim="${esc}[2m"
+  c_reset="${esc}[0m"
 else
   c_cyan=''; c_green=''; c_yellow=''; c_red=''; c_dim=''; c_reset=''
 fi

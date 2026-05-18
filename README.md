@@ -88,7 +88,7 @@ Each session is independent — separate context, separate URL, separate log at 
 **One command. Works on Linux + macOS.**
 
 ```bash
-curl -fsSL https://jawwadzafar.github.io/pager/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh
 ```
 
 The installer detects your OS (Linux or macOS), checks you have `git`, clones `pager` into `~/.pager`, and runs the platform bootstrap — `apt` + `systemd --user` units on Linux, Homebrew + LaunchAgent on macOS. **Idempotent** — re-run any time to update (does a `git pull` + re-bootstrap).
@@ -98,7 +98,7 @@ Env overrides if you want a non-default install:
 ```bash
 PAGER_HOME=$HOME/code/pager \
 PAGER_BRANCH=v0.4.0 \
-  curl -fsSL https://jawwadzafar.github.io/pager/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh
 ```
 
 ### Manual install (from a fresh clone)

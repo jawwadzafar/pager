@@ -86,16 +86,17 @@ echo
 # 1. binary exists and is executable
 check "bin/pager is executable" test -x "$PAGER"
 
-# 2. bash syntax check on every shell file in repo
+# 2. syntax check every shell file in repo.
+# bash files first, then install.sh under POSIX sh (it's #!/bin/sh).
 for f in "$REPO/bin/pager" "$REPO/lib/sudo.sh" \
-         "$REPO/bootstrap.sh" "$REPO/install.sh" \
+         "$REPO/bootstrap.sh" \
          "$REPO/linux/bootstrap.sh" "$REPO/macos/bootstrap.sh"; do
   [ -f "$f" ] || continue
-  check "syntax: ${f#"$REPO/"}" bash -n "$f"
+  check "syntax (bash): ${f#"$REPO/"}" bash -n "$f"
 done
-
-# 2b. install.sh and docs/install.sh must be byte-identical (Makefile sync target).
-check "installers in sync (root ↔ docs)" diff -q "$REPO/install.sh" "$REPO/docs/install.sh"
+if [ -f "$REPO/install.sh" ]; then
+  check "syntax (sh): install.sh" sh -n "$REPO/install.sh"
+fi
 
 # 3. help on bare invoke
 check_output "bare invoke prints usage" 'Usage' "$PAGER"

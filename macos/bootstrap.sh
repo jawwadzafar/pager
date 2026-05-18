@@ -45,10 +45,18 @@ eval "$("$BREW_PREFIX/bin/brew" shellenv)"
 ok "Homebrew available at $BREW_PREFIX"
 
 # 2. BREW PACKAGES ------------------------------------------------------------
-log "2/11 brew install tmux libyaml python@3.13"
-# Quiet outputs but surface real errors.
-brew install --quiet tmux libyaml python@3.13
-ok "tmux + libyaml + python@3.13 installed"
+# tmux:    persistent session for claude --remote-control
+# libyaml: C parser used by pyyaml (faster CSafeLoader path)
+#
+# We deliberately do NOT install brew's python@X — Apple's CLT python3
+# is fine for the inline json/yaml/datetime work bin/pager does, and
+# Homebrew's `python` formulae don't always create the unversioned
+# /opt/homebrew/bin/python3 symlink (real-Mac test in 0.4.0 showed
+# bare `python3` resolving to /usr/bin/python3 anyway, making the brew
+# python install ~75MB of dead weight).
+log "2/11 brew install tmux libyaml"
+brew install --quiet tmux libyaml
+ok "tmux + libyaml installed"
 
 # 3. SSHPASS (optional, third-party tap, swallow failures) --------------------
 log "3/11 sshpass (optional)"

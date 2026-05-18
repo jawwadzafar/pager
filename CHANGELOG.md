@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-05-19
+
+Quick follow-up to 0.4.0 — sharper install URL, POSIX-portable installer, drop the dead-weight brew python install.
+
+### Changed
+- **Install URL switched to `raw.githubusercontent.com`.** Same one-liner shape (`curl … | sh`) but the new URL is `https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh`. Advantages over the GitHub Pages URL: zero Pages build delay between a commit and the installer reflecting it, and one canonical source of truth.
+- **`install.sh` is now POSIX `sh`-compatible**, not bash. Shebang changed to `#!/bin/sh`. Dropped `set -o pipefail` (kept `set -eu`), replaced `$'\033…'` ANSI literals with explicit `printf '\033'` capture. Runs cleanly under `dash`, `bash`, `ash`, and zsh's `sh`. The one-liner now uses `| sh` instead of `| bash`.
+- **Dropped `docs/install.sh` + the `make sync-installer` target + the "installers in sync" smoke test.** No longer needed — `raw.githubusercontent.com` always serves the canonical `install.sh` directly.
+- **Dropped `brew install python@3.13`** from the macOS bootstrap step 2. Real-Mac test in 0.3.x showed Apple's `/usr/bin/python3` ends up being used by `bin/pager` anyway (Homebrew's `python@X` formulae don't reliably create the unversioned `/opt/homebrew/bin/python3` symlink). Step 2 is now just `brew install tmux libyaml` — ~75 MB lighter and faster on first install.
+- Linted under `shellcheck -s sh install.sh` plus the existing bash-mode pass on the other shell files. Smoke tests: 23/23 pass.
+
+### Notes
+- For `PAGER_BRANCH=v0.4.1 …` to actually pin against a specific release, the maintainer needs to push annotated git tags. Tags are pushed alongside this release.
+
 ## [0.4.0] — 2026-05-19
 
 The "now-it-feels-real" release: one-line installer, symmetric platform layout, cleaner repo top level.
@@ -233,7 +247,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/jawwadzafar/pager/releases/tag/v0.4.1
 [0.4.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.4.0
 [0.3.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.3.0
 [0.2.3]: https://github.com/jawwadzafar/pager/releases/tag/v0.2.3

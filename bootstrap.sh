@@ -5,7 +5,7 @@
 # compatibility with the old layout (Linux bootstrap was at the repo root in
 # v0.1.0–v0.3.x). New entry points:
 #
-#   curl -fsSL https://jawwadzafar.github.io/pager/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh
 #                                  ← fresh install, no repo needed
 #   ./install.sh                   ← from a fresh clone, clones to ~/.pager
 #   ./linux/bootstrap.sh           ← from an existing checkout, Linux

@@ -14,15 +14,15 @@ REPO_ROOT := $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
 SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 BATS       := $(shell command -v bats 2>/dev/null)
 
-# Bash scripts to lint/test
-BASH_FILES := bin/pager lib/sudo.sh bootstrap.sh install.sh \
+# Bash scripts to lint/test (install.sh is POSIX sh — linted separately)
+BASH_FILES := bin/pager lib/sudo.sh bootstrap.sh \
               linux/bootstrap.sh macos/bootstrap.sh \
               tests/smoke.sh actions/*.sh
+SH_FILES   := install.sh
 
 .PHONY: help install uninstall service service-uninstall \
         watchdog watchdog-uninstall \
-        test lint check bootstrap status url clean logs version \
-        sync-installer
+        test lint check bootstrap status url clean logs version
 
 help:  ## Print this help
 	@printf '\033[1mpager\033[0m — make targets\n\n'
@@ -89,12 +89,13 @@ bootstrap:  ## Full setup (apt + env + service + linger) — same as ./bootstrap
 test:  ## Run smoke tests
 	@bash $(REPO_ROOT)/tests/smoke.sh
 
-lint:  ## shellcheck all bash files (skipped silently if shellcheck not installed)
+lint:  ## shellcheck all shell files (skipped silently if shellcheck not installed)
 	@if [ -z "$(SHELLCHECK)" ]; then \
 	  echo "shellcheck not installed — skipping. Install: sudo apt install shellcheck"; \
 	  exit 0; \
 	fi
 	@$(SHELLCHECK) -x $(BASH_FILES)
+	@$(SHELLCHECK) -s sh $(SH_FILES)
 	@echo "shellcheck: ok"
 
 check: lint test  ## Run lint + test (the CI target)
@@ -118,8 +119,3 @@ version:  ## Print version
 clean:  ## Remove generated logs
 	@rm -fv $(REPO_ROOT)/logs/*.log 2>/dev/null || true
 	@echo "Logs cleaned."
-
-sync-installer:  ## Copy install.sh -> docs/install.sh (Pages publishes /docs)
-	@cp -v $(REPO_ROOT)/install.sh $(REPO_ROOT)/docs/install.sh
-	@chmod 644 $(REPO_ROOT)/docs/install.sh
-	@echo "Synced. Commit both files together."
