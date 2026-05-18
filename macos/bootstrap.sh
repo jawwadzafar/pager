@@ -145,20 +145,22 @@ else
   ok "~/.zprofile already prepends ~/.local/bin"
 fi
 
-# 7b. ~/.zshrc — pager .env auto-source
+# 7b. ~/.zshrc — pager .env auto-source.
+# Writes the literal __PAGER_ROOT path so the line is correct regardless of
+# where the user cloned the repo (~/pager, ~/.pager, anywhere).
 touch "$HOME/.zshrc"
-# shellcheck disable=SC2016
-if ! grep -qE '\.\s+"\$HOME/pager/\.env"|\.\s+"\$PAGER_ROOT/\.env"' "$HOME/.zshrc" 2>/dev/null; then
-  cat >> "$HOME/.zshrc" <<'EOF'
+# Match any existing pager .env auto-source line, regardless of path.
+if ! grep -qE 'pager/\.env' "$HOME/.zshrc" 2>/dev/null; then
+  cat >> "$HOME/.zshrc" <<EOF
 
-# pager: auto-load secrets from ~/pager/.env into every shell
-[ -f "$HOME/pager/.env" ] && set -a && . "$HOME/pager/.env" && set +a
+# pager: auto-load secrets from $__PAGER_ROOT/.env into every shell
+[ -f "$__PAGER_ROOT/.env" ] && set -a && . "$__PAGER_ROOT/.env" && set +a
 EOF
   # shellcheck disable=SC2088
-  ok "Wrote ~/.zshrc auto-source line for ~/pager/.env"
+  ok "Wrote ~/.zshrc auto-source line for $__PAGER_ROOT/.env"
 else
   # shellcheck disable=SC2088
-  ok "~/.zshrc already auto-sources ~/pager/.env"
+  ok "~/.zshrc already auto-sources a pager .env"
 fi
 
 # 8. SSH key ------------------------------------------------------------------
@@ -236,6 +238,7 @@ done
 render_plist() {
   local src="$1" dst="$2"
   sed \
+    -e "s|__PAGER_ROOT__|$__PAGER_ROOT|g" \
     -e "s|__USER_HOME__|$HOME|g" \
     -e "s|__BREW_BIN__|$BREW_PREFIX/bin|g" \
     "$src" > "$dst"

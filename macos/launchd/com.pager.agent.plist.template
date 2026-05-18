@@ -16,7 +16,7 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>__USER_HOME__/pager/bin/pager</string>
+        <string>__PAGER_ROOT__/bin/pager</string>
         <string>watchdog</string>
         <string>claude</string>
     </array>
@@ -28,9 +28,9 @@
     <integer>70</integer>
 
     <key>StandardOutPath</key>
-    <string>__USER_HOME__/pager/logs/launchd-agent.out</string>
+    <string>__PAGER_ROOT__/logs/launchd-agent.out</string>
     <key>StandardErrorPath</key>
-    <string>__USER_HOME__/pager/logs/launchd-agent.err</string>
+    <string>__PAGER_ROOT__/logs/launchd-agent.err</string>
 
     <key>EnvironmentVariables</key>
     <dict>
@@ -38,6 +38,8 @@
         <string>__BREW_BIN__:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:__USER_HOME__/.local/bin</string>
         <key>HOME</key>
         <string>__USER_HOME__</string>
+        <key>PAGER_ROOT</key>
+        <string>__PAGER_ROOT__</string>
     </dict>
 </dict>
 </plist>

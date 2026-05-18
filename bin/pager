@@ -152,6 +152,150 @@ _watchdog_enable() {
   fi
 }
 
+# ─── uninstall: tear down system integration ──────────────────────────────
+# Reverses everything macos/bootstrap.sh or Linux bootstrap.sh installed,
+# WITHOUT touching the repo directory or your .env (so secrets are safe).
+# Mirror image of bootstrap:
+#   - Stops + removes the LaunchAgent (Mac) or systemd units (Linux)
+#   - Removes ~/.local/bin/pager symlink
+#   - Strips the pager .env auto-source line from ~/.bashrc / ~/.zshrc
+#   - Leaves $__PAGER_ROOT in place — delete it manually if you want a
+#     full nuke. The .env in particular is precious.
+cmd_uninstall() {
+  local yes=0 arg
+  for arg in "$@"; do
+    case "$arg" in
+      -y|--yes) yes=1 ;;
+      -h|--help)
+        cat <<EOF
+$(bold "pager uninstall") $(dim "— tear down system integration (keeps repo + .env)")
+
+  Removes the LaunchAgent / systemd units, the ~/.local/bin/pager symlink,
+  and the pager .env auto-source lines from your shell rc files.
+
+  Does NOT delete $__PAGER_ROOT or your .env. If you want a full wipe,
+  finish with: $(bold "rm -rf $__PAGER_ROOT")
+
+  -y, --yes    skip the confirmation prompt
+  -h, --help   this message
+EOF
+        return 0
+        ;;
+      *) echo "$(red "Unknown option:") $arg  (use --help for usage)" >&2; return 1 ;;
+    esac
+  done
+
+  printf '%s\n\n' "$(bold "pager uninstall") $(dim "— $__PAGER_ROOT  (os: $PAGER_OS)")"
+  echo "This will:"
+  if [ "$PAGER_OS" = "mac" ]; then
+    echo "  • launchctl bootout + remove ~/Library/LaunchAgents/com.pager.{agent,session,watch}.plist"
+  else
+    echo "  • systemctl --user stop + disable pager.service + pager-watch.timer"
+    echo "    + remove ~/.config/systemd/user/pager*"
+  fi
+  echo "  • Remove ~/.local/bin/pager symlink"
+  echo "  • Strip pager .env auto-source lines from ~/.bashrc, ~/.zshrc, ~/.zprofile, ~/.profile"
+  echo "  • Leave $__PAGER_ROOT and your .env in place"
+  echo
+
+  if [ "$yes" != 1 ]; then
+    printf "Proceed? [y/N] "
+    local ans
+    read -r ans
+    case "$ans" in
+      y|Y|yes|YES) ;;
+      *) echo "Aborted."; return 1 ;;
+    esac
+  fi
+
+  echo
+
+  # 1. Service / agent teardown
+  if [ "$PAGER_OS" = "mac" ]; then
+    local uid label
+    uid="$(id -u)"
+    for label in com.pager.agent com.pager.session com.pager.watch; do
+      if launchctl bootout "gui/$uid/$label" 2>/dev/null; then
+        printf '  %s booted out %s\n' "$(green ✓)" "$label"
+      fi
+      if [ -f "$HOME/Library/LaunchAgents/$label.plist" ]; then
+        rm -f "$HOME/Library/LaunchAgents/$label.plist"
+        printf '  %s removed ~/Library/LaunchAgents/%s.plist\n' "$(green ✓)" "$label"
+      fi
+    done
+  else
+    local unit
+    for unit in pager-watch.timer pager-watch.service pager.service; do
+      if systemctl --user is-enabled "$unit" >/dev/null 2>&1 || \
+         systemctl --user is-active  "$unit" >/dev/null 2>&1; then
+        systemctl --user stop    "$unit" 2>/dev/null || true
+        systemctl --user disable "$unit" 2>/dev/null || true
+        printf '  %s stopped + disabled %s\n' "$(green ✓)" "$unit"
+      fi
+      if [ -f "$HOME/.config/systemd/user/$unit" ]; then
+        rm -f "$HOME/.config/systemd/user/$unit"
+        printf '  %s removed ~/.config/systemd/user/%s\n' "$(green ✓)" "$unit"
+      fi
+    done
+    systemctl --user daemon-reload 2>/dev/null || true
+    # Note: we intentionally do NOT disable linger — the user may have other
+    # --user services that depend on it.
+  fi
+
+  # 2. ~/.local/bin/pager symlink
+  if [ -L "$HOME/.local/bin/pager" ] || [ -f "$HOME/.local/bin/pager" ]; then
+    rm -f "$HOME/.local/bin/pager"
+    printf '  %s removed ~/.local/bin/pager\n' "$(green ✓)"
+  fi
+
+  # 3. Strip the pager .env auto-source block from each shell rc file.
+  #    Backs up first ($rc.pager.bak.<timestamp>) so the user can recover.
+  local rc backup
+  for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.profile"; do
+    [ -f "$rc" ] || continue
+    grep -qE 'pager/\.env' "$rc" 2>/dev/null || continue
+    backup="$rc.pager.bak.$(date +%Y%m%d%H%M%S)"
+    cp "$rc" "$backup"
+    python3 - "$rc" <<'PYEOF'
+import re, sys
+p = sys.argv[1]
+with open(p) as f: txt = f.read()
+# Remove the 3-line block we (and earlier versions of bootstrap) write:
+#   <blank>
+#   # pager: auto-load secrets ...
+#   [ -f "<some-path>/pager/.env" ] && set -a && . "<same path>" && set +a
+txt2 = re.sub(
+    r'\n?\n# pager:[^\n]*\n\[ -f "[^"]*pager/\.env"[^\n]*\n',
+    '',
+    txt,
+)
+# Also catch a stray line (no preceding comment) if a previous bootstrap version
+# wrote just the [ -f ... ] line.
+txt2 = re.sub(
+    r'\n\[ -f "[^"]*pager/\.env"[^\n]*set \+a\n',
+    '\n',
+    txt2,
+)
+with open(p, 'w') as f: f.write(txt2)
+PYEOF
+    printf '  %s cleaned pager .env line from %s  %s\n' \
+      "$(green ✓)" "$(basename "$rc")" "$(dim "(backup: $(basename "$backup"))")"
+  done
+
+  echo
+  printf '%s\n' "$(green '✓ uninstall complete')"
+  echo
+  echo "Repo + your .env are still at: $__PAGER_ROOT"
+  echo "To finish a full wipe:"
+  printf '  %s  %s\n' "rm -rf $__PAGER_ROOT" "$(dim '# removes repo, logs, and your .env (irreversible)')"
+  if [ "$PAGER_OS" = "mac" ]; then
+    echo
+    echo "Optional macOS extras:"
+    printf '  %s  %s\n' "sfltool resetbtm" "$(dim '# clears stale Login Items entries + notifications')"
+    printf '  %s\n' "$(dim '  (You can also remove tmux from System Settings → Privacy & Security → App Management.)')"
+  fi
+}
+
 # ─── kill: drop a session WITHOUT pausing the watchdog ─────────────────────
 # Same shape as the old (v0.2.0) `pager stop`. Use this when you want the
 # watchdog to immediately respawn the session — e.g. to force a fresh claude
@@ -651,6 +795,9 @@ $(bold "Remote ops")
   $(bold "run")    $(dim "<alias> <action>")   run actions/<action>.sh on a remote host
 
 $(bold "Other")
+  $(bold "uninstall") $(dim "[-y]")            tear down system integration (services, symlink,
+                              shell rc lines). Keeps the repo + .env intact.
+                              Final cleanup: rm -rf $__PAGER_ROOT
   $(bold "help")                       this message
 
 $(bold "Env overrides")
@@ -679,6 +826,7 @@ case "${1-}" in
   stop)                shift; cmd_stop "$@" ;;
   kill)                shift; cmd_kill "$@" ;;
   restart)             shift; cmd_restart "$@" ;;
+  uninstall)           shift; cmd_uninstall "$@" ;;
   status|ls)           shift; cmd_status "$@" ;;
   url)                 shift; cmd_url "$@" ;;
   watchdog)            shift; cmd_watchdog "$@" ;;

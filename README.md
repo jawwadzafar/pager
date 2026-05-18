@@ -88,7 +88,7 @@ Each session is independent — separate context, separate URL, separate log at 
 ### Linux (Debian / Ubuntu, `apt`)
 
 ```bash
-git clone https://github.com/jawwadzafar/pager.git ~/pager && ~/pager/bootstrap.sh
+git clone https://github.com/jawwadzafar/pager.git ~/.pager && ~/.pager/bootstrap.sh
 ```
 
 Uses **`apt`** for prereqs (`tmux`, `sshpass`, `python3-yaml`, `openssh-client`, `curl`, `ca-certificates`) and **`systemd --user`** units for autostart. Linger (`loginctl enable-linger`) makes the service run at boot before login.
@@ -96,12 +96,21 @@ Uses **`apt`** for prereqs (`tmux`, `sshpass`, `python3-yaml`, `openssh-client`,
 ### macOS (Tahoe 26 / Sequoia 15, `brew`)
 
 ```bash
-git clone https://github.com/jawwadzafar/pager.git ~/pager && ~/pager/macos/bootstrap.sh
+git clone https://github.com/jawwadzafar/pager.git ~/.pager && ~/.pager/macos/bootstrap.sh
 ```
 
 Uses **Homebrew** for prereqs (`tmux`, `libyaml`, `python@3.13`, optional `sshpass` from the `hudochenkov/sshpass` tap) and **LaunchAgents** for autostart. Both Apple Silicon (`/opt/homebrew`) and Intel (`/usr/local`) are detected automatically. Autostart fires at **login** (LaunchAgent semantics) — see [`macos/README.md`](macos/README.md) for the permissions you'll be asked for, the auto-login caveat, and the full uninstall recipe.
 
-Both scripts are **idempotent** — safe to re-run any time, only does work that's missing.
+Both scripts are **idempotent** — safe to re-run any time, only does work that's missing. They work from any clone path; the docs above use `~/.pager` (hidden, keeps `$HOME` tidy) but `~/pager`, `~/code/pager`, or anywhere else also works.
+
+### Uninstall
+
+```bash
+pager uninstall          # stops the service/LaunchAgent, removes the symlink + shell-rc lines
+rm -rf ~/.pager          # optional: final wipe of the repo + logs + .env
+```
+
+`pager uninstall` is **non-destructive** — it tears down system integration but never deletes your `.env` or the repo. Add `-y` to skip the confirmation prompt.
 
 <details>
 <summary>What the Linux bootstrap does, step by step</summary>

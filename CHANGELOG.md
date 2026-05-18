@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-19
+
+### Added
+- **`pager uninstall`** — the missing inverse of `bootstrap.sh`. Stops the service / LaunchAgent, removes the `~/.local/bin/pager` symlink, and strips the pager `.env` auto-source line from `~/.bashrc` / `~/.zshrc` / `~/.zprofile` / `~/.profile` (with a timestamped backup of each rc file). Deliberately leaves the repo and your `.env` in place — `rm -rf $PAGER_ROOT` is a separate, explicit step you do yourself. Pass `-y` / `--yes` to skip the confirmation prompt. OS-aware: `launchctl bootout` on macOS (covers the new `com.pager.agent` *and* the legacy `com.pager.session` / `com.pager.watch` labels for old installs), `systemctl --user stop+disable` on Linux.
+- The macOS uninstall path also prints the optional `sfltool resetbtm` hint for clearing any stale Login Items entries and notification stacks.
+
+### Changed
+- **Install path is now agnostic of clone location.** Previously the macOS LaunchAgent plist template hard-coded `$HOME/pager/bin/pager` via the `__USER_HOME__/pager/...` placeholders, so a clone at any other path (e.g. `~/.pager`, `~/code/pager`) would silently render a broken plist. Replaced with a `__PAGER_ROOT__` placeholder that bootstrap substitutes with the actual `$__PAGER_ROOT` at install time. The agent now also exports `PAGER_ROOT` in its `EnvironmentVariables` so spawned children inherit the path.
+- The shell-rc auto-source line that bootstrap writes (`~/.zshrc` on macOS, `~/.bashrc` on Linux) now contains the literal `$__PAGER_ROOT` path of the current install instead of the hard-coded `$HOME/pager/.env` form. Idempotency check still matches any `pager/.env` shape, so re-running bootstrap from a new location is safe.
+- README now recommends cloning to **`~/.pager`** (hidden, keeps `$HOME` tidy) instead of `~/pager`, with an explicit note that any clone path works. Old installs at `~/pager` continue to work — just re-run bootstrap from there.
+
+### Notes
+- Migrating from `~/pager` to `~/.pager`: easiest path is `pager uninstall` (from the current install), then `mv ~/pager ~/.pager`, then `~/.pager/macos/bootstrap.sh` (or `~/.pager/bootstrap.sh` on Linux). Bootstrap rewrites the LaunchAgent plist and shell-rc line with the new path.
+
 ## [0.2.3] — 2026-05-19
 
 ### Changed
@@ -164,7 +178,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.3.0
 [0.2.3]: https://github.com/jawwadzafar/pager/releases/tag/v0.2.3
 [0.2.2]: https://github.com/jawwadzafar/pager/releases/tag/v0.2.2
 [0.2.1]: https://github.com/jawwadzafar/pager/releases/tag/v0.2.1
