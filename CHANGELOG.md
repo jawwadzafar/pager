@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-05-19
+
+### Changed
+- **One LaunchAgent instead of two on macOS.** Previously installed `com.pager.session.plist` + `com.pager.watch.plist`, which showed up as two separate rows in System Settings → Login Items & Extensions and triggered two "Background item added" notifications. Replaced with a single `com.pager.agent.plist` that runs `pager watchdog claude` at `RunAtLoad=true` + `StartInterval=70`. The watchdog's existing "session missing → spawn it" code path handles initial startup; subsequent ticks check health. Same behavior, half the system noise.
+- macOS bootstrap step 10 now migrates any old two-agent install in place: it `bootout`s the old `com.pager.session` / `com.pager.watch`, removes their plist files, then installs the new `com.pager.agent`.
+- `bin/pager`'s OS-aware paths (`cmd_doctor`, `cmd_help`, `_watchdog_disable`, `_watchdog_enable`) updated to reference `com.pager.agent`. `cmd_doctor` also warns if a stale `com.pager.session` or `com.pager.watch` plist is still on disk, prompting a re-bootstrap to migrate.
+- macos/README.md, CHANGELOG, and the bootstrap verify banner all updated to match.
+
+### Notes
+- This is a clean migration — re-run `./macos/bootstrap.sh` on the Mac and the old agents are torn down before the new one is installed. No manual cleanup needed.
+- The combined agent also has a side benefit on TCC: only one launchd-spawned context interacts with the tmux server at a time (the watchdog *is* the spawner of the session), which can reduce the cross-context TCC prompts macOS fires for "X would like to access data from other apps."
+
 ## [0.2.2] — 2026-05-19
 
 Follow-up to 0.2.1 — adds `kill` and `restart` so users have the full set of session-control verbs, not just `stop` (which now also pauses the watchdog).
@@ -152,7 +164,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/jawwadzafar/pager/releases/tag/v0.2.3
 [0.2.2]: https://github.com/jawwadzafar/pager/releases/tag/v0.2.2
 [0.2.1]: https://github.com/jawwadzafar/pager/releases/tag/v0.2.1
 [0.2.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.2.0

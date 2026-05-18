@@ -136,7 +136,7 @@ cmd_stop() {
 # the platform-specific call succeeded, 1 if no watchdog unit was loaded.
 _watchdog_disable() {
   if [ "$PAGER_OS" = "mac" ]; then
-    launchctl bootout "gui/$(id -u)/com.pager.watch" 2>/dev/null
+    launchctl bootout "gui/$(id -u)/com.pager.agent" 2>/dev/null
   else
     systemctl --user stop pager-watch.timer 2>/dev/null
   fi
@@ -145,8 +145,8 @@ _watchdog_disable() {
 # Re-enable the watchdog process. Mirrors _watchdog_disable.
 _watchdog_enable() {
   if [ "$PAGER_OS" = "mac" ]; then
-    [ -f "$HOME/Library/LaunchAgents/com.pager.watch.plist" ] || return 1
-    launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.pager.watch.plist" 2>/dev/null
+    [ -f "$HOME/Library/LaunchAgents/com.pager.agent.plist" ] || return 1
+    launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.pager.agent.plist" 2>/dev/null
   else
     systemctl --user start pager-watch.timer 2>/dev/null
   fi
@@ -501,23 +501,21 @@ PY
   if [ "$PAGER_OS" = "mac" ]; then
     local uid
     uid="$(id -u)"
-    if [ -f "$HOME/Library/LaunchAgents/com.pager.session.plist" ]; then
-      if launchctl print "gui/$uid/com.pager.session" >/dev/null 2>&1; then
-        pass "com.pager.session: loaded"
+    # Warn if either of the legacy two-agent plists is still on disk — the
+    # user should re-run bootstrap to migrate to the single com.pager.agent.
+    for old in com.pager.session com.pager.watch; do
+      if [ -f "$HOME/Library/LaunchAgents/$old.plist" ]; then
+        warn "legacy LaunchAgent $old still installed" "re-run macos/bootstrap.sh to migrate to com.pager.agent"
+      fi
+    done
+    if [ -f "$HOME/Library/LaunchAgents/com.pager.agent.plist" ]; then
+      if launchctl print "gui/$uid/com.pager.agent" >/dev/null 2>&1; then
+        pass "com.pager.agent: loaded"
       else
-        fail "com.pager.session: not loaded" "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.pager.session.plist"
+        fail "com.pager.agent: not loaded" "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.pager.agent.plist"
       fi
     else
-      warn "com.pager.session not installed" "re-run macos/bootstrap.sh"
-    fi
-    if [ -f "$HOME/Library/LaunchAgents/com.pager.watch.plist" ]; then
-      if launchctl print "gui/$uid/com.pager.watch" >/dev/null 2>&1; then
-        pass "com.pager.watch: loaded"
-      else
-        warn "com.pager.watch: not loaded" "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.pager.watch.plist"
-      fi
-    else
-      warn "com.pager.watch not installed" "re-run macos/bootstrap.sh"
+      warn "com.pager.agent not installed" "re-run macos/bootstrap.sh"
     fi
     # LaunchAgents only run at login — no boot-time equivalent of linger.
     # We report this as informational rather than warn, because "fix it" is
@@ -565,7 +563,7 @@ PY
       warn "last watchdog tick ${age}s ago (timer interval is 60s — running late)"
     else
       if [ "$PAGER_OS" = "mac" ]; then
-        fail "last watchdog tick ${age}s ago (timer stalled?)" "launchctl print gui/\$(id -u)/com.pager.watch"
+        fail "last watchdog tick ${age}s ago (timer stalled?)" "launchctl print gui/\$(id -u)/com.pager.agent"
       else
         fail "last watchdog tick ${age}s ago (timer stalled?)" "systemctl --user status pager-watch.timer"
       fi
@@ -606,9 +604,9 @@ PY
 __pager_help_service_block() {
   if [ "$PAGER_OS" = "mac" ]; then
     cat <<EOF
-  launchctl print gui/\$(id -u)/com.pager.session   $(dim "# autostart agent")
-  tail -F $__PAGER_ROOT/logs/launchd-session.{out,err} $(dim "# launchd-level logs")
-  launchctl print gui/\$(id -u)/com.pager.watch     $(dim "# watchdog agent")
+  launchctl print gui/\$(id -u)/com.pager.agent    $(dim "# combined session+watchdog agent")
+  tail -F $__PAGER_ROOT/logs/launchd-agent.{out,err} $(dim "# launchd-level logs")
+  launchctl kickstart gui/\$(id -u)/com.pager.agent $(dim "# fire a watchdog tick now")
 EOF
   else
     cat <<EOF

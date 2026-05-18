@@ -27,7 +27,7 @@ The script is **idempotent** — safe to re-run any time. It only does work that
 4. **PyYAML via pip.** Homebrew's pyyaml formula was disabled in late 2024, so we install pyyaml via `pip3 install --user --break-system-packages pyyaml`. This is safe — pyyaml is a single small library, `--user` installs to your per-user site-packages, and `--break-system-packages` only bypasses the PEP 668 protective warning (no system Python is modified).
 5. **`~/.zprofile`** gets a `brew shellenv` line and a `~/.local/bin` PATH prepend.
 6. **`~/.zshrc`** gets the pager `.env` auto-source line.
-7. **Two LaunchAgents** are installed at `~/Library/LaunchAgents/com.pager.{session,watch}.plist` and loaded via `launchctl bootstrap gui/$(id -u)`.
+7. **One LaunchAgent** is installed at `~/Library/LaunchAgents/com.pager.agent.plist` and loaded via `launchctl bootstrap gui/$(id -u)`. It runs `pager watchdog claude` at load (which spawns the session) and then every 70 seconds (which checks health + restarts if needed). One agent = one entry in Login Items.
 
 After bootstrap finishes, open a new terminal (or run `source ~/.zprofile && source ~/.zshrc`) and you should be able to run `pager`, `pager url`, etc.
 
@@ -63,7 +63,7 @@ To make it stop asking forever, grant the permission permanently:
 System Settings → Privacy & Security → App Management → toggle tmux ON
 ```
 
-If `tmux` isn't listed yet, run the watchdog manually once to trigger the prompt: `launchctl kickstart gui/$(id -u)/com.pager.watch`. Then it appears in the list and you can flip the toggle.
+If `tmux` isn't listed yet, run the watchdog manually once to trigger the prompt: `launchctl kickstart gui/$(id -u)/com.pager.agent`. Then it appears in the list and you can flip the toggle.
 
 You may also need (less common): **Privacy & Security → Files and Folders → tmux → "All".**
 
@@ -93,7 +93,7 @@ Mental model: **start** = up. **stop** = down and stays down. **kill** = down, w
 |---|---|---|
 | Xcode CLT install | `brew: command not found`, or step 1 of bootstrap warns Homebrew didn't install | Run `xcode-select --install` manually, then re-run `./macos/bootstrap.sh`. |
 | Mac password to Homebrew | Bootstrap exits at step 1 | Re-run `./macos/bootstrap.sh` — type the password this time. |
-| Background Items toggle (turned `pager` off) | `pager doctor` reports `com.pager.session: not loaded`; tmux session disappears at next login | System Settings → General → Login Items & Extensions → scroll to **Allow in the Background** → toggle `pager` back on. Or just re-run `./macos/bootstrap.sh` (idempotent — it does `bootout` + `bootstrap` which re-registers cleanly). |
+| Background Items toggle (turned `pager` off) | `pager doctor` reports `com.pager.agent: not loaded`; tmux session disappears at next login | System Settings → General → Login Items & Extensions → scroll to **Allow in the Background** → toggle `pager` back on. Or just re-run `./macos/bootstrap.sh` (idempotent — it does `bootout` + `bootstrap` which re-registers cleanly). |
 | Network access to claude (Little Snitch / Lulu users) | Claude can't reach claude.ai; no Remote Control URL appears | Allow `claude` outbound to `*.claude.ai` and `*.anthropic.com` in your firewall app. |
 
 Pager itself never asks for Full Disk Access, Accessibility, Screen Recording, or any other TCC permission — none of its features need them. If you see a prompt naming one of those, something else on your Mac is asking (it's almost certainly not pager). Deny and report.
@@ -125,30 +125,26 @@ If your Mac is rebooting while no one is logged in, pager won't come up until lo
 ## Common operations
 
 ```bash
-# Check that the LaunchAgents are loaded
-launchctl print gui/$(id -u)/com.pager.session
-launchctl print gui/$(id -u)/com.pager.watch
+# Check that the LaunchAgent is loaded
+launchctl print gui/$(id -u)/com.pager.agent
 launchctl list | grep pager
 
-# Restart the session agent (e.g. after a config change)
-launchctl bootout   gui/$(id -u)/com.pager.session
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.pager.session.plist
+# Restart the agent (e.g. after a config change)
+launchctl bootout   gui/$(id -u)/com.pager.agent
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.pager.agent.plist
 
-# Trigger the watchdog manually (instead of waiting 70s)
-launchctl kickstart gui/$(id -u)/com.pager.watch
+# Trigger a watchdog tick manually (instead of waiting 70s)
+launchctl kickstart gui/$(id -u)/com.pager.agent
 
 # Tail launchd-level stdout/stderr (the `tmux pipe-pane` log at logs/claude.log is the pane content)
-tail -F ~/pager/logs/launchd-session.out ~/pager/logs/launchd-session.err
-tail -F ~/pager/logs/launchd-watch.out  ~/pager/logs/launchd-watch.err
+tail -F ~/pager/logs/launchd-agent.out ~/pager/logs/launchd-agent.err
 ```
 
 ## Uninstall
 
 ```bash
-launchctl bootout gui/$(id -u)/com.pager.session
-launchctl bootout gui/$(id -u)/com.pager.watch
-rm ~/Library/LaunchAgents/com.pager.session.plist
-rm ~/Library/LaunchAgents/com.pager.watch.plist
+launchctl bootout gui/$(id -u)/com.pager.agent
+rm ~/Library/LaunchAgents/com.pager.agent.plist
 rm ~/.local/bin/pager
 ```
 
@@ -166,8 +162,8 @@ If the tap install fails (network, GitHub rate limit, future tap retirement), bo
 macos/
 ├── bootstrap.sh                              ← the installer
 ├── launchd/
-│   ├── com.pager.session.plist.template      ← session LaunchAgent
-│   └── com.pager.watch.plist.template        ← watchdog LaunchAgent (StartInterval=70s)
+│   └── com.pager.agent.plist.template        ← single combined LaunchAgent
+│                                                (RunAtLoad=true + StartInterval=70)
 └── README.md                                 ← you are here
 ```
 

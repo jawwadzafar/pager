@@ -211,12 +211,27 @@ else
   fi
 fi
 
-# 10. LAUNCHAGENTS (session + watchdog) ---------------------------------------
-log "10/11 LaunchAgents (session + watchdog)"
+# 10. LAUNCHAGENT (single combined agent) ------------------------------------
+# Earlier versions (0.2.0 – 0.2.2) installed two agents: com.pager.session
+# and com.pager.watch. macOS lists each as a separate Login Items entry,
+# which is noisy. From 0.2.3 onward we ship a single com.pager.agent that
+# runs the watchdog periodically (its existing restart path handles the
+# initial spawn too, so we don't lose anything). This block migrates any
+# old two-agent install in place.
+log "10/11 LaunchAgent (single combined agent)"
 mkdir -p "$HOME/Library/LaunchAgents"
 mkdir -p "$__PAGER_ROOT/logs"
 
-# Render the templates with absolute paths substituted in.
+# 10a. Tear down the old two-agent layout if present (idempotent).
+for old in com.pager.session com.pager.watch; do
+  if [ -f "$HOME/Library/LaunchAgents/$old.plist" ]; then
+    launchctl bootout "gui/$USER_UID/$old" 2>/dev/null || true
+    rm -f "$HOME/Library/LaunchAgents/$old.plist"
+    ok "Migrated away from $old (booted out + removed)"
+  fi
+done
+
+# 10b. Render the combined agent template with absolute paths substituted in.
 # launchd plists don't expand $HOME or ~; they need literal absolute paths.
 render_plist() {
   local src="$1" dst="$2"
@@ -228,34 +243,24 @@ render_plist() {
 }
 
 render_plist \
-  "$__PAGER_ROOT/macos/launchd/com.pager.session.plist.template" \
-  "$HOME/Library/LaunchAgents/com.pager.session.plist"
-ok "Rendered com.pager.session.plist"
+  "$__PAGER_ROOT/macos/launchd/com.pager.agent.plist.template" \
+  "$HOME/Library/LaunchAgents/com.pager.agent.plist"
+ok "Rendered com.pager.agent.plist"
 
-render_plist \
-  "$__PAGER_ROOT/macos/launchd/com.pager.watch.plist.template" \
-  "$HOME/Library/LaunchAgents/com.pager.watch.plist"
-ok "Rendered com.pager.watch.plist"
+# 10c. Reload (bootout if loaded, then bootstrap). Modern launchctl 2 syntax.
+launchctl bootout "gui/$USER_UID/com.pager.agent" 2>/dev/null || true
+launchctl bootstrap "gui/$USER_UID" "$HOME/Library/LaunchAgents/com.pager.agent.plist"
+ok "com.pager.agent loaded"
 
-# Reload: bootout (ignore "not loaded") + bootstrap. This is the modern,
-# non-deprecated launchctl 2.0 syntax.
-launchctl bootout "gui/$USER_UID/com.pager.session" 2>/dev/null || true
-launchctl bootstrap "gui/$USER_UID" "$HOME/Library/LaunchAgents/com.pager.session.plist"
-ok "com.pager.session loaded"
-
-launchctl bootout "gui/$USER_UID/com.pager.watch" 2>/dev/null || true
-launchctl bootstrap "gui/$USER_UID" "$HOME/Library/LaunchAgents/com.pager.watch.plist"
-ok "com.pager.watch loaded"
-
-# Brief settle before verify.
+# Brief settle before verify (first tick of the watchdog spawns the session).
 sleep 3
 
 # 11. VERIFY ------------------------------------------------------------------
 log "11/11 verify"
-if launchctl print "gui/$USER_UID/com.pager.session" >/dev/null 2>&1; then
-  ok "com.pager.session registered with launchd"
+if launchctl print "gui/$USER_UID/com.pager.agent" >/dev/null 2>&1; then
+  ok "com.pager.agent registered with launchd"
 else
-  warn "com.pager.session not visible to launchctl — check ~/pager/logs/launchd-session.err"
+  warn "com.pager.agent not visible to launchctl — check ~/pager/logs/launchd-agent.err"
 fi
 
 if tmux ls 2>/dev/null | grep -q .; then
@@ -299,9 +304,8 @@ cat <<'EOF'
       doctor checks the LaunchAgents via launchctl; status is purely
       tmux-based. No systemctl noise on macOS.
     • Uninstall:
-        launchctl bootout gui/$(id -u)/com.pager.session
-        launchctl bootout gui/$(id -u)/com.pager.watch
-        rm ~/Library/LaunchAgents/com.pager.{session,watch}.plist
+        launchctl bootout gui/$(id -u)/com.pager.agent
+        rm ~/Library/LaunchAgents/com.pager.agent.plist
 
   Re-running this script is safe — it only does work that's missing.
 ──────────────────────────────────────────────────────────────────────

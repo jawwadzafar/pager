@@ -3,28 +3,34 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.pager.session</string>
+    <string>com.pager.agent</string>
+
+    <!--
+      Combined session + watchdog agent. One Login Items entry.
+
+      `pager watchdog claude` already handles "session missing → spawn it"
+      via its existing restart path, so a single periodic agent covers
+      both initial spawn (RunAtLoad fires immediately on load/login) and
+      ongoing health checks (StartInterval every 70 s).
+    -->
 
     <key>ProgramArguments</key>
     <array>
         <string>__USER_HOME__/pager/bin/pager</string>
-        <string>start</string>
+        <string>watchdog</string>
         <string>claude</string>
     </array>
 
     <key>RunAtLoad</key>
     <true/>
 
-    <key>KeepAlive</key>
-    <dict>
-        <key>SuccessfulExit</key>
-        <false/>
-    </dict>
+    <key>StartInterval</key>
+    <integer>70</integer>
 
     <key>StandardOutPath</key>
-    <string>__USER_HOME__/pager/logs/launchd-session.out</string>
+    <string>__USER_HOME__/pager/logs/launchd-agent.out</string>
     <key>StandardErrorPath</key>
-    <string>__USER_HOME__/pager/logs/launchd-session.err</string>
+    <string>__USER_HOME__/pager/logs/launchd-agent.err</string>
 
     <key>EnvironmentVariables</key>
     <dict>
