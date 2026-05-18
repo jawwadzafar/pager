@@ -6,9 +6,10 @@ After=default.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=%h/pager/bin/pager start claude
-ExecStop=%h/pager/bin/pager stop claude
+ExecStart=__PAGER_ROOT__/bin/pager start claude
+ExecStop=__PAGER_ROOT__/bin/pager stop claude
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PAGER_ROOT=__PAGER_ROOT__
 
 [Install]
 WantedBy=default.target

@@ -5,5 +5,6 @@ After=pager.service
 
 [Service]
 Type=oneshot
-ExecStart=%h/pager/bin/pager watchdog claude
+ExecStart=__PAGER_ROOT__/bin/pager watchdog claude
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PAGER_ROOT=__PAGER_ROOT__

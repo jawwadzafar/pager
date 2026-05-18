@@ -78,18 +78,20 @@ fi
 # Only wire the .env auto-source. PATH is handled by the symlink above plus
 # ~/.profile's standard ~/.local/bin block — no need to touch PATH in bashrc.
 log "4/10 ~/.bashrc env wiring"
-# shellcheck disable=SC2016  # intentional literal $ in regex
-if ! grep -qE '\.\s+"\$HOME/pager/\.env"|\.\s+"\$PAGER_ROOT/\.env"' "$HOME/.bashrc" 2>/dev/null; then
-  cat >> "$HOME/.bashrc" <<'EOF'
+# Match any existing pager .env auto-source line, regardless of clone path.
+# Writes the literal $__PAGER_ROOT so the line is correct whether the user
+# cloned to ~/pager, ~/.pager, or anywhere else.
+if ! grep -qE 'pager/\.env' "$HOME/.bashrc" 2>/dev/null; then
+  cat >> "$HOME/.bashrc" <<EOF
 
-# pager: auto-load secrets from ~/pager/.env into every shell
-[ -f "$HOME/pager/.env" ] && set -a && . "$HOME/pager/.env" && set +a
+# pager: auto-load secrets from $__PAGER_ROOT/.env into every shell
+[ -f "$__PAGER_ROOT/.env" ] && set -a && . "$__PAGER_ROOT/.env" && set +a
 EOF
   # shellcheck disable=SC2088
-  ok "Wrote ~/.bashrc auto-source line for ~/pager/.env"
+  ok "Wrote ~/.bashrc auto-source line for $__PAGER_ROOT/.env"
 else
   # shellcheck disable=SC2088
-  ok "bashrc already auto-sources ~/pager/.env"
+  ok "~/.bashrc already auto-sources a pager .env"
 fi
 
 # Clean up legacy PATH-prepend line from older bootstrap versions (was needed
@@ -162,9 +164,17 @@ fi
 # 7. SYSTEMD USER UNITS (service + watchdog) ---------------------------------
 log "7/10 systemd user units"
 mkdir -p "$HOME/.config/systemd/user"
-install -m 644 "$__PAGER_ROOT/systemd/pager.service"       "$HOME/.config/systemd/user/pager.service"
-install -m 644 "$__PAGER_ROOT/systemd/pager-watch.service" "$HOME/.config/systemd/user/pager-watch.service"
-install -m 644 "$__PAGER_ROOT/systemd/pager-watch.timer"   "$HOME/.config/systemd/user/pager-watch.timer"
+# Render the unit templates with __PAGER_ROOT__ substituted to the real
+# install path. This is what makes a clone at ~/.pager (or anywhere else
+# besides ~/pager) work — the units previously hard-coded `%h/pager/...`.
+render_unit() {
+  local src="$1" dst="$2"
+  sed -e "s|__PAGER_ROOT__|$__PAGER_ROOT|g" "$src" > "$dst"
+  chmod 644 "$dst"
+}
+render_unit "$__PAGER_ROOT/systemd/pager.service"       "$HOME/.config/systemd/user/pager.service"
+render_unit "$__PAGER_ROOT/systemd/pager-watch.service" "$HOME/.config/systemd/user/pager-watch.service"
+render_unit "$__PAGER_ROOT/systemd/pager-watch.timer"   "$HOME/.config/systemd/user/pager-watch.timer"
 systemctl --user daemon-reload
 systemctl --user enable pager.service       >/dev/null 2>&1
 systemctl --user enable pager-watch.timer   >/dev/null 2>&1
