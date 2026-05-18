@@ -20,7 +20,7 @@
 <p align="center">
   <strong><a href="https://jawwadzafar.github.io/pager/">📚 Website &amp; quick-start</a></strong> ·
   <a href="#-the-60-second-phone-walkthrough">walkthrough</a> ·
-  <a href="#-install-on-a-fresh-linux-box-one-command">install</a> ·
+  <a href="#-install">install</a> ·
   <a href="CHANGELOG.md">changelog</a>
 </p>
 
@@ -83,25 +83,66 @@ Each session is independent — separate context, separate URL, separate log at 
 
 ---
 
-## ⚡ Install (one command)
+## ⚡ Install
 
-### Linux (Debian / Ubuntu, `apt`)
-
-```bash
-git clone https://github.com/jawwadzafar/pager.git ~/.pager && ~/.pager/bootstrap.sh
-```
-
-Uses **`apt`** for prereqs (`tmux`, `sshpass`, `python3-yaml`, `openssh-client`, `curl`, `ca-certificates`) and **`systemd --user`** units for autostart. Linger (`loginctl enable-linger`) makes the service run at boot before login.
-
-### macOS (Tahoe 26 / Sequoia 15, `brew`)
+**One command. Works on Linux + macOS.**
 
 ```bash
-git clone https://github.com/jawwadzafar/pager.git ~/.pager && ~/.pager/macos/bootstrap.sh
+curl -fsSL https://jawwadzafar.github.io/pager/install.sh | bash
 ```
 
-Uses **Homebrew** for prereqs (`tmux`, `libyaml`, `python@3.13`, optional `sshpass` from the `hudochenkov/sshpass` tap) and **LaunchAgents** for autostart. Both Apple Silicon (`/opt/homebrew`) and Intel (`/usr/local`) are detected automatically. Autostart fires at **login** (LaunchAgent semantics) — see [`macos/README.md`](macos/README.md) for the permissions you'll be asked for, the auto-login caveat, and the full uninstall recipe.
+The installer detects your OS (Linux or macOS), checks you have `git`, clones `pager` into `~/.pager`, and runs the platform bootstrap — `apt` + `systemd --user` units on Linux, Homebrew + LaunchAgent on macOS. **Idempotent** — re-run any time to update (does a `git pull` + re-bootstrap).
 
-Both scripts are **idempotent** — safe to re-run any time, only does work that's missing. They work from any clone path; the docs above use `~/.pager` (hidden, keeps `$HOME` tidy) but `~/pager`, `~/code/pager`, or anywhere else also works.
+Env overrides if you want a non-default install:
+
+```bash
+PAGER_HOME=$HOME/code/pager \
+PAGER_BRANCH=v0.4.0 \
+  curl -fsSL https://jawwadzafar.github.io/pager/install.sh | bash
+```
+
+### Manual install (from a fresh clone)
+
+```bash
+git clone https://github.com/jawwadzafar/pager.git ~/.pager
+cd ~/.pager
+./install.sh                          # same auto-detect as the curl version
+# — or, explicitly:
+./linux/bootstrap.sh                  # Linux  (Debian / Ubuntu, apt)
+./macos/bootstrap.sh                  # macOS  (Tahoe 26 / Sequoia 15, brew)
+```
+
+<details>
+<summary>What the Linux bootstrap does, step by step</summary>
+
+1. Installs apt prereqs (`tmux`, `sshpass`, `python3-yaml`, `openssh-client`, `curl`, `ca-certificates`).
+2. Creates `~/.pager/.env` from `.env.example` (chmod 600, gitignored).
+3. Wires `~/.bashrc` to auto-source `~/.pager/.env` and puts `~/.local/bin` on `PATH`.
+4. Reports SSH-key passphrase state with the exact fix command if needed.
+5. **Pre-trusts `$HOME` in `~/.claude.json`** so the autostart session isn't blocked by Claude Code's first-run "Trust this folder?" prompt.
+6. Installs the `pager.service` systemd user unit + `pager-watch.timer`.
+7. Enables linger (so the service runs at boot, before any login).
+8. Starts the service.
+9. Prints the live phone-accessible Remote Control URL.
+
+</details>
+
+<details>
+<summary>What the macOS bootstrap does, step by step</summary>
+
+1. Installs Homebrew if missing (the installer prompts for your Mac password — see [`macos/README.md`](macos/README.md#permissions-youll-be-asked-for)).
+2. `brew install tmux libyaml python@3.13`.
+3. `brew install hudochenkov/sshpass/sshpass` (optional; non-fatal if tap is unreachable).
+4. Installs `pyyaml` via `python3 -m pip install --user` (with a cascade for old/new pip).
+5. Creates `~/.pager/.env` from `.env.example` (chmod 600, gitignored).
+6. Symlinks `~/.local/bin/pager` → `~/.pager/bin/pager`.
+7. Wires `~/.zprofile` (brew shellenv + `~/.local/bin` PATH) and `~/.zshrc` (`.env` auto-source).
+8. Reports SSH-key passphrase state.
+9. **Pre-trusts `$HOME` in `~/.claude.json`**.
+10. Renders the LaunchAgent plist with your home dir + brew prefix, loads it via `launchctl bootstrap gui/$(id -u)`.
+11. Verifies: `launchctl print`, `tmux ls`, prints the live Remote Control URL.
+
+</details>
 
 ### Uninstall
 

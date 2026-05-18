@@ -87,10 +87,15 @@ echo
 check "bin/pager is executable" test -x "$PAGER"
 
 # 2. bash syntax check on every shell file in repo
-for f in "$REPO/bin/pager" "$REPO/lib/sudo.sh" "$REPO/bootstrap.sh"; do
+for f in "$REPO/bin/pager" "$REPO/lib/sudo.sh" \
+         "$REPO/bootstrap.sh" "$REPO/install.sh" \
+         "$REPO/linux/bootstrap.sh" "$REPO/macos/bootstrap.sh"; do
   [ -f "$f" ] || continue
-  check "syntax: $(basename "$f")" bash -n "$f"
+  check "syntax: ${f#"$REPO/"}" bash -n "$f"
 done
+
+# 2b. install.sh and docs/install.sh must be byte-identical (Makefile sync target).
+check "installers in sync (root ↔ docs)" diff -q "$REPO/install.sh" "$REPO/docs/install.sh"
 
 # 3. help on bare invoke
 check_output "bare invoke prints usage" 'Usage' "$PAGER"
@@ -144,8 +149,11 @@ else
   printf '  \033[31m✗\033[0m watchdog on live session writes noop row\n'; fail=$((fail+1))
 fi
 
-# 10. stop named session
-check "stop: kills named session" "$PAGER" stop smoke-test
+# 10. kill named session (use `kill`, not `stop` — stop now sets the
+#     .stopped semaphore which makes the next watchdog tick noop, the
+#     v0.2.1 persistent-stop behavior. `kill` is the right verb when we
+#     want the watchdog to respawn at the next tick.)
+check "kill: drops named session" "$PAGER" kill smoke-test
 total=$((total+1))
 if ! "$PAGER" status 2>&1 | grep -q '^smoke-test\b'; then
   printf '  \033[32m✓\033[0m status: smoke-test gone\n'; pass=$((pass+1))
@@ -158,6 +166,8 @@ fi
 # TMUX_TMPDIR), so verify with plain `tmux has-session`, no `-L`.
 total=$((total+1))
 rm -f "$REPO/logs/watch.csv"
+# Belt and suspenders: ensure no leftover stop semaphore from prior runs.
+rm -f "$REPO/logs/.stopped"
 if env PAGER_NO_REMOTE=1 "$PAGER" watchdog smoke-test >/dev/null 2>&1 \
    && tmux has-session -t smoke-test 2>/dev/null \
    && awk -F, 'NR==2 { if ($7=="restart") exit 0; exit 1 }' "$REPO/logs/watch.csv"; then

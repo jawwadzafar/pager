@@ -41,16 +41,12 @@
   </p>
 
   <div class="os-install">
-    <div class="install-block" data-os="linux">
-      <span class="os-tag">Linux</span>
-      <span class="prompt">$</span><code class="install-line">git clone https://github.com/jawwadzafar/pager.git ~/pager &amp;&amp; ~/pager/bootstrap.sh</code>
-      <button class="copy" data-target="[data-os='linux'] .install-line" aria-label="Copy Linux install command">copy</button>
+    <div class="install-block" data-os="any">
+      <span class="os-tag os-tag-any">Linux + macOS</span>
+      <span class="prompt">$</span><code class="install-line">curl -fsSL https://jawwadzafar.github.io/pager/install.sh | bash</code>
+      <button class="copy" data-target="[data-os='any'] .install-line" aria-label="Copy install command">copy</button>
     </div>
-    <div class="install-block" data-os="mac">
-      <span class="os-tag os-tag-mac">macOS</span>
-      <span class="prompt">$</span><code class="install-line">git clone https://github.com/jawwadzafar/pager.git ~/pager &amp;&amp; ~/pager/macos/bootstrap.sh</code>
-      <button class="copy" data-target="[data-os='mac'] .install-line" aria-label="Copy macOS install command">copy</button>
-    </div>
+    <p class="install-sub">One command. Detects your OS, clones to <code>~/.pager</code>, runs the right bootstrap. Re-run to update.</p>
   </div>
 
   <div class="cta-row">
@@ -82,12 +78,8 @@
   <ol class="steps">
     <li>
       <strong>Install on your machine (once).</strong>
-      <code class="block">git clone https://github.com/jawwadzafar/pager.git ~/pager
-# Linux:
-~/pager/bootstrap.sh
-# macOS:
-~/pager/macos/bootstrap.sh</code>
-      Installs deps via <code>apt</code> (Linux) or <code>brew</code> (macOS), wires the shell, registers the service or LaunchAgent. A tmux session named <code>claude</code> is already running <code>claude --remote-control</code>.
+      <code class="block">curl -fsSL https://jawwadzafar.github.io/pager/install.sh | bash</code>
+      One command. Detects Linux vs macOS, installs deps via <code>apt</code> or <code>brew</code>, wires the shell, registers the service or LaunchAgent. A tmux session named <code>claude</code> is already running <code>claude --remote-control</code> when it finishes.
     </li>
     <li>
       <strong>Get the URL.</strong>
@@ -177,14 +169,19 @@
 <section id="install" class="section install-section">
   <h2>Install</h2>
 
+  <div class="install-block install-block-hero" data-os="any">
+    <span class="prompt">$</span><code class="install-line">curl -fsSL https://jawwadzafar.github.io/pager/install.sh | bash</code>
+    <button class="copy" data-target="[data-os='any'] .install-line" aria-label="Copy install command">copy</button>
+  </div>
+
+  <p class="install-sub-large">One command for both platforms. Detects Linux vs macOS, requires only <code>git</code>, clones the repo into <code>~/.pager</code>, runs the right platform bootstrap. <strong>Idempotent</strong> — re-run any time to update.</p>
+
   <div class="os-grid">
     <article class="os-card">
       <header class="os-card-head">
         <span class="os-tag">Linux</span>
         <span class="os-card-sub">Debian, Ubuntu, any modern <code>apt</code> box</span>
       </header>
-      <code class="block">git clone https://github.com/jawwadzafar/pager.git ~/pager
-~/pager/bootstrap.sh</code>
       <p class="os-card-foot">Installs <code>tmux</code>, <code>sshpass</code>, <code>python3-yaml</code> via <code>apt</code>. Registers <code>pager.service</code> + <code>pager-watch.timer</code>. Enables linger so it starts at boot before any login.</p>
     </article>
 
@@ -193,11 +190,11 @@
         <span class="os-tag os-tag-mac">macOS</span>
         <span class="os-card-sub">Tahoe&nbsp;26 / Sequoia&nbsp;15, Apple Silicon or Intel</span>
       </header>
-      <code class="block">git clone https://github.com/jawwadzafar/pager.git ~/pager
-~/pager/macos/bootstrap.sh</code>
-      <p class="os-card-foot">Installs Homebrew (if missing), then <code>brew install tmux libyaml python@3.13</code> + optional <code>hudochenkov/sshpass</code>. Registers <code>com.pager.session</code> + <code>com.pager.watch</code> LaunchAgents. Starts at login. <a href="https://github.com/jawwadzafar/pager/blob/main/macos/README.md">macOS notes →</a></p>
+      <p class="os-card-foot">Installs Homebrew (if missing), then <code>brew install tmux libyaml python@3.13</code> + optional <code>hudochenkov/sshpass</code>. Registers <code>com.pager.agent</code> LaunchAgent. Starts at login. <a href="https://github.com/jawwadzafar/pager/blob/main/macos/README.md">macOS notes →</a></p>
     </article>
   </div>
+
+  <h3 class="install-h3">After install</h3>
 
   <ol class="install-steps">
     <li>
@@ -210,8 +207,21 @@ pager url      <span class="dim"># phone URL</span></code>
     </li>
   </ol>
 
+  <h3 class="install-h3">Or, the manual way</h3>
+
+  <pre><code><span class="t-prompt">$</span> git clone https://github.com/jawwadzafar/pager.git ~/.pager
+<span class="t-prompt">$</span> cd ~/.pager
+<span class="t-prompt">$</span> ./install.sh                <span class="t-dim"># same auto-detect</span>
+<span class="t-prompt">$</span> ./linux/bootstrap.sh        <span class="t-dim"># or, explicitly</span>
+<span class="t-prompt">$</span> ./macos/bootstrap.sh</code></pre>
+
+  <h3 class="install-h3">Uninstall</h3>
+
+  <pre><code><span class="t-prompt">$</span> pager uninstall          <span class="t-dim"># stops the service/LaunchAgent, removes the symlink + shell-rc lines</span>
+<span class="t-prompt">$</span> rm -rf ~/.pager          <span class="t-dim"># optional: final wipe of the repo + logs + .env</span></code></pre>
+
   <p class="footer-cta">
-    Full docs, CLI reference, and design notes live in the
+    Full CLI reference, design notes, and deeper docs live in the
     <a href="https://github.com/jawwadzafar/pager">repo README</a>.
   </p>
 </section>

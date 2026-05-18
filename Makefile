@@ -15,11 +15,14 @@ SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 BATS       := $(shell command -v bats 2>/dev/null)
 
 # Bash scripts to lint/test
-BASH_FILES := bin/pager lib/sudo.sh bootstrap.sh tests/smoke.sh actions/*.sh
+BASH_FILES := bin/pager lib/sudo.sh bootstrap.sh install.sh \
+              linux/bootstrap.sh macos/bootstrap.sh \
+              tests/smoke.sh actions/*.sh
 
 .PHONY: help install uninstall service service-uninstall \
         watchdog watchdog-uninstall \
-        test lint check bootstrap status url clean logs version
+        test lint check bootstrap status url clean logs version \
+        sync-installer
 
 help:  ## Print this help
 	@printf '\033[1mpager\033[0m — make targets\n\n'
@@ -48,7 +51,9 @@ uninstall:  ## Remove the symlink installed by 'make install'
 
 service:  ## Install + enable the pager.service systemd user unit
 	@mkdir -p $(SYSTEMD_USER_DIR)
-	@install -m 644 $(REPO_ROOT)/systemd/pager.service $(SYSTEMD_USER_DIR)/pager.service
+	@sed -e 's|__PAGER_ROOT__|$(REPO_ROOT)|g' \
+	  $(REPO_ROOT)/linux/systemd/pager.service > $(SYSTEMD_USER_DIR)/pager.service
+	@chmod 644 $(SYSTEMD_USER_DIR)/pager.service
 	@systemctl --user daemon-reload
 	@systemctl --user enable --now pager.service
 	@echo "Service installed and started. Status: $$(systemctl --user is-active pager.service)"
@@ -62,8 +67,11 @@ service-uninstall:  ## Stop + remove the pager.service systemd user unit
 
 watchdog:  ## Install + enable the pager-watch.timer (1-min health check)
 	@mkdir -p $(SYSTEMD_USER_DIR)
-	@install -m 644 $(REPO_ROOT)/systemd/pager-watch.service $(SYSTEMD_USER_DIR)/pager-watch.service
-	@install -m 644 $(REPO_ROOT)/systemd/pager-watch.timer   $(SYSTEMD_USER_DIR)/pager-watch.timer
+	@sed -e 's|__PAGER_ROOT__|$(REPO_ROOT)|g' \
+	  $(REPO_ROOT)/linux/systemd/pager-watch.service > $(SYSTEMD_USER_DIR)/pager-watch.service
+	@sed -e 's|__PAGER_ROOT__|$(REPO_ROOT)|g' \
+	  $(REPO_ROOT)/linux/systemd/pager-watch.timer   > $(SYSTEMD_USER_DIR)/pager-watch.timer
+	@chmod 644 $(SYSTEMD_USER_DIR)/pager-watch.service $(SYSTEMD_USER_DIR)/pager-watch.timer
 	@systemctl --user daemon-reload
 	@systemctl --user enable --now pager-watch.timer
 	@echo "Watchdog timer installed. Next tick in: $$(systemctl --user list-timers pager-watch.timer --no-legend 2>/dev/null | awk '{print $$1, $$2}')"
@@ -110,3 +118,8 @@ version:  ## Print version
 clean:  ## Remove generated logs
 	@rm -fv $(REPO_ROOT)/logs/*.log 2>/dev/null || true
 	@echo "Logs cleaned."
+
+sync-installer:  ## Copy install.sh -> docs/install.sh (Pages publishes /docs)
+	@cp -v $(REPO_ROOT)/install.sh $(REPO_ROOT)/docs/install.sh
+	@chmod 644 $(REPO_ROOT)/docs/install.sh
+	@echo "Synced. Commit both files together."

@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-19
+
+The "now-it-feels-real" release: one-line installer, symmetric platform layout, cleaner repo top level.
+
+### Added
+
+**One-line installer** (`curl | bash`, à la Claude Code / rustup / homebrew)
+
+```bash
+curl -fsSL https://jawwadzafar.github.io/pager/install.sh | bash
+```
+
+- New `install.sh` at repo root + `docs/install.sh` (the Pages-served copy at `https://jawwadzafar.github.io/pager/install.sh`).
+- Detects OS (`uname -s`), requires only `git`, clones into `$PAGER_HOME` (default `~/.pager`), then `exec`s the platform bootstrap. Idempotent on re-runs (does a `git pull --ff-only` then re-bootstrap).
+- Env overrides: `PAGER_HOME`, `PAGER_BRANCH` (e.g. pin to a tag), `PAGER_REPO` (e.g. fork).
+- Fresh-Mac and fresh-Linux failure modes are friendly: missing `git` prints the exact install command (`xcode-select --install` / `sudo apt-get install -y git`).
+- `make sync-installer` keeps `install.sh` ↔ `docs/install.sh` byte-identical; new smoke test `installers in sync (root ↔ docs)` runs `diff -q` between them so a forgotten sync fails CI.
+
+### Changed
+
+**Symmetric platform layout** (`linux/` mirrors `macos/`)
+
+```
+pager/
+├── install.sh              ← one-line entry point (NEW)
+├── bootstrap.sh            ← thin OS-detecting shim (Linux | macOS)
+├── linux/
+│   ├── bootstrap.sh        ← was at repo root, now lives here
+│   └── systemd/            ← was at repo root, now lives here
+│       ├── pager.service
+│       ├── pager-watch.service
+│       └── pager-watch.timer
+├── macos/
+│   ├── bootstrap.sh        ← unchanged
+│   └── launchd/com.pager.agent.plist.template
+├── bin/pager
+├── lib/{common,sudo}.sh
+├── assets/
+├── docs/                   ← website + install.sh copy
+└── tests/, actions/, …
+```
+
+- Moved `bootstrap.sh` → `linux/bootstrap.sh`. Root `bootstrap.sh` is now an 8-line dispatcher that `exec`s the right one based on `uname -s`, so anyone with the old path in their muscle memory or in scripts still works.
+- Moved `systemd/` → `linux/systemd/`. The unit templates with `__PAGER_ROOT__` substitution (added in 0.3.0) are unchanged in content.
+- `Makefile` updated for the new paths: `service` and `watchdog` targets now `sed`-substitute `__PAGER_ROOT__` before installing the units (was a hard-coded path before).
+- Smoke tests now also bash-syntax-check `install.sh`, `linux/bootstrap.sh`, `macos/bootstrap.sh`, and the installer sync. The "kill named session" / "watchdog restarts a dead session" pair now uses `pager kill` (the v0.2.2 verb that doesn't set the stop semaphore) — `pager stop` correctly stays-stopped now, which was breaking the old "expect watchdog to respawn" test.
+- README install section rewritten: the `curl | bash` is now the primary install. The git-clone + per-OS bootstrap forms are kept as the "manual install" option. Expandable per-OS breakdowns preserved.
+- Website hero install block: one big copy-able `curl | bash` line tagged "Linux + macOS" (warm amber pill, distinct from the Linux green and macOS blue tags from the per-OS cards). Walkthrough step 1 + the dedicated Install section also feature the one-liner; the per-OS cards just describe what each bootstrap does, with a "Or, the manual way" terminal block underneath. Added `Uninstall` block on the install page.
+
+### Migration
+
+- **From v0.3.x or earlier:** `cd ~/pager && git pull` will pick up the new layout. Your existing service / LaunchAgent paths still work because they point at `$__PAGER_ROOT/bin/pager`, which hasn't moved. To rename to `~/.pager` while you're at it: `pager uninstall && mv ~/pager ~/.pager && ~/.pager/install.sh`.
+- **Fresh installs:** just `curl | bash`.
+
 ## [0.3.0] — 2026-05-19
 
 ### Added
@@ -179,7 +233,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.4.0
 [0.3.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.3.0
 [0.2.3]: https://github.com/jawwadzafar/pager/releases/tag/v0.2.3
 [0.2.2]: https://github.com/jawwadzafar/pager/releases/tag/v0.2.2
