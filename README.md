@@ -89,6 +89,8 @@ Each session is independent — separate context, separate URL, separate log at 
 git clone https://github.com/jawwadzafar/pager.git ~/pager && ~/pager/bootstrap.sh
 ```
 
+> **macOS users:** run `./macos/bootstrap.sh` from the cloned repo instead — see [`macos/README.md`](macos/README.md) for what's supported (Tahoe 26 + Sequoia 15, login-time autostart via LaunchAgents) and current phase-1 limitations.
+
 That's it. `bootstrap.sh` is **idempotent** — safe to re-run any time, it only does work that's missing. It:
 
 1. Installs apt prereqs (`tmux`, `sshpass`, `python3-yaml`, `openssh-client`, `curl`, `ca-certificates`)
