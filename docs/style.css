@@ -395,13 +395,28 @@ footer a:hover { color: var(--green); }
   .hero h1 { font-size: 1.9rem; }
   .hero .tagline { font-size: 1rem; }
   .install-block { font-size: 0.78rem; padding: 12px 14px; }
-  .topbar { padding: 12px 18px; }
+  .topbar { padding: 10px 16px; }
   .topbar nav { gap: 14px; font-size: 0.85rem; }
   main { padding: 0 18px; }
   .section { padding: 48px 0; }
   .section h2 { font-size: 1.35rem; }
   .diagram { font-size: 0.7rem; }
   .steps li { padding-left: 48px; }
+}
+
+/* Phone: hide in-page anchors so the topbar stays one row (brand + GitHub) */
+@media (max-width: 560px) {
+  .brand { font-size: 0.98rem; gap: 8px; }
+  .brand img { width: 26px; height: 26px; }
+  .topbar nav { gap: 0; font-size: 0.82rem; white-space: nowrap; }
+  .topbar nav a:not(.external) { display: none; }
+  .topbar nav a.external {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--fg);
+  }
+  .topbar nav a.external:hover { border-color: var(--green-soft); color: var(--green); }
 }
 
 /* Reduced motion */
