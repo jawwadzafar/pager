@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>pager — remote Claude Code sessions for any Linux box</title>
+<meta name="description" content="Turn any always-on Linux box into a remote-controllable Claude Code rig. Background tmux + Claude Code's --remote-control, driven from your phone. One-command install. MIT."/>
+<meta property="og:title" content="pager — remote Claude Code sessions for any Linux box"/>
+<meta property="og:description" content="Persistent tmux + Claude Code remote-control, driven from your phone. One-command install. MIT."/>
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="https://jawwadzafar.github.io/pager/"/>
+<link rel="icon" href="logo.svg" type="image/svg+xml"/>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="#top" aria-label="pager home">
+    <img src="logo.svg" alt="" width="32" height="32"/>
+    <span>pager</span>
+  </a>
+  <nav>
+    <a href="#walkthrough">Walkthrough</a>
+    <a href="#features">Features</a>
+    <a href="#install">Install</a>
+    <a href="https://github.com/jawwadzafar/pager" class="external">GitHub →</a>
+  </nav>
+</header>
+
+<main id="top">
+
+<section class="hero">
+  <img src="logo.svg" alt="pager logo" class="logo" width="280" height="105"/>
+  <h1>Remote Claude Code sessions, from your phone.</h1>
+  <p class="tagline">
+    Turn any always-on Linux box into a Claude Code rig you carry in your pocket.
+    Background tmux + Claude Code's built-in <code>--remote-control</code>.
+    No SSH tunnel. No port forward. No relay you don't already trust.
+  </p>
+
+  <div class="install-block">
+    <span class="prompt">$</span><code class="install-line">git clone https://github.com/jawwadzafar/pager.git ~/pager &amp;&amp; ~/pager/bootstrap.sh</code>
+    <button class="copy" data-target=".install-line" aria-label="Copy install command">copy</button>
+  </div>
+
+  <div class="cta-row">
+    <a class="btn btn-primary" href="https://github.com/jawwadzafar/pager">View on GitHub</a>
+    <a class="btn" href="#walkthrough">How it works</a>
+  </div>
+
+  <p class="meta">MIT licensed · Bash + systemd · works on Ubuntu / Debian / any modern Linux</p>
+</section>
+
+<section id="walkthrough" class="section">
+  <h2>The 60-second phone walkthrough</h2>
+
+  <pre class="diagram" aria-hidden="true">
+  ┌─────────────────┐     ┌─────────────────┐     ┌────────────────────┐
+  │  Linux box      │     │  claude.ai      │     │  Your phone        │
+  │  (this repo)    │ ──► │  relay          │ ──► │  claude.ai/code    │
+  │                 │     │                 │     │                    │
+  │  tmux: claude   │     │  session_…      │     │  attached!         │
+  │  --remote-      │     │                 │     │                    │
+  │  control        │     │                 │     │                    │
+  └─────────────────┘     └─────────────────┘     └────────────────────┘</pre>
+
+  <ol class="steps">
+    <li>
+      <strong>Install on the box (once).</strong>
+      <code class="block">git clone https://github.com/jawwadzafar/pager.git ~/pager &amp;&amp; ~/pager/bootstrap.sh</code>
+      Installs deps, wires the shell, enables linger, starts <code>pager.service</code>. A tmux session named <code>claude</code> is already running <code>claude --remote-control</code>.
+    </li>
+    <li>
+      <strong>Get the URL.</strong>
+      <code class="block">pager url
+# → https://claude.ai/code/session_01XXXXXXXXXXXXXX</code>
+    </li>
+    <li>
+      <strong>Open that URL on your phone</strong> (signed into the same claude.ai account). You're now talking to the same Claude session that lives on your box. Type on phone, type on terminal — both stream to the same conversation.
+    </li>
+    <li>
+      <strong>Reboot the box.</strong> When it comes back, the session is already up. <code>pager url</code> for the new link.
+    </li>
+  </ol>
+</section>
+
+<section id="features" class="section">
+  <h2>What pager gives you</h2>
+
+  <div class="features">
+    <article>
+      <h3>One-command install</h3>
+      <p><code>bootstrap.sh</code> is idempotent — apt prereqs, env, PATH, Claude Code trust flag, systemd unit, linger, watchdog. Re-run anytime; only fixes what's missing.</p>
+    </article>
+    <article>
+      <h3>Survives reboots</h3>
+      <p>A user-level systemd service with linger enabled brings the session back at boot, before any login. Your phone URL stays current.</p>
+    </article>
+    <article>
+      <h3>Self-healing watchdog</h3>
+      <p><code>pager-watch.timer</code> ticks every 60s, logs session state to <code>logs/watch.csv</code>, and restarts a dead session automatically.</p>
+    </article>
+    <article>
+      <h3>One-command diagnosis</h3>
+      <p><code>pager doctor</code> walks the full install — deps, PATH shadowing, .env perms, trust flag, services, linger, watchdog freshness — with a fix hint on every failure.</p>
+    </article>
+    <article>
+      <h3>Multiple sessions</h3>
+      <p><code>pager start work</code> spawns a second independent session with its own URL and log. Separate context, separate window on your phone.</p>
+    </article>
+    <article>
+      <h3>Inventory-driven SSH helper</h3>
+      <p>Small <code>actions/</code> + <code>inventory.yaml</code> layer lets the always-on Claude operate your fleet from inside the session. Credentials in <code>.env</code>, never echoed.</p>
+    </article>
+  </div>
+</section>
+
+<section id="doctor" class="section">
+  <h2>Know it's working: <code>pager doctor</code></h2>
+  <p class="doctor-intro">Run after install, after a reboot, when something looks off. Exits non-zero if anything's broken, with a fix hint inline.</p>
+
+  <pre class="terminal" aria-label="pager doctor output">
+<span class="t-prompt">$</span> <span class="t-cmd">pager doctor</span>
+<span class="t-bold">pager doctor</span> <span class="t-dim">— /home/you/pager</span>
+
+<span class="t-bold">Dependencies</span>
+  <span class="t-ok">✓</span> tmux 3.6
+  <span class="t-ok">✓</span> claude 2.1.143
+  <span class="t-ok">✓</span> python3 3.14.4
+
+<span class="t-bold">Install &amp; PATH</span>
+  <span class="t-ok">✓</span> 'pager' resolves to /home/you/.local/bin/pager → this repo
+
+<span class="t-bold">Secrets</span>
+  <span class="t-ok">✓</span> .env perms 600
+
+<span class="t-bold">Claude Code workspace trust</span>
+  <span class="t-ok">✓</span> $HOME pre-trusted in ~/.claude.json (autostart safe)
+
+<span class="t-bold">Services</span>
+  <span class="t-ok">✓</span> pager.service: active
+  <span class="t-ok">✓</span> pager-watch.timer: active
+  <span class="t-ok">✓</span> linger enabled (services start at boot)
+
+<span class="t-bold">Watchdog state</span>
+  <span class="t-ok">✓</span> last watchdog tick 48s ago
+
+<span class="t-bold">Sessions</span>
+  claude: 1 windows (created Mon May 18 21:10:02 2026)
+
+<span class="t-ok">✓ all checks passed</span></pre>
+</section>
+
+<section id="install" class="section install-section">
+  <h2>Install</h2>
+  <ol class="install-steps">
+    <li>
+      <p>On any Ubuntu/Debian/modern-Linux box:</p>
+      <code class="block">git clone https://github.com/jawwadzafar/pager.git ~/pager &amp;&amp; ~/pager/bootstrap.sh</code>
+    </li>
+    <li>
+      <p>Open a new shell (or <code>source ~/.bashrc</code>), then:</p>
+      <code class="block">pager doctor   <span class="dim"># everything green?</span>
+pager url      <span class="dim"># phone URL</span></code>
+    </li>
+    <li>
+      <p>Open that URL on a phone signed into the same claude.ai account. Done.</p>
+    </li>
+  </ol>
+  <p class="footer-cta">
+    Full docs, CLI reference, and design notes live in the
+    <a href="https://github.com/jawwadzafar/pager">repo README</a>.
+  </p>
+</section>
+
+</main>
+
+<footer>
+  <p>
+    <a href="https://github.com/jawwadzafar/pager">github.com/jawwadzafar/pager</a>
+    · MIT
+    · built for <a href="https://claude.ai/code">Claude Code</a>
+  </p>
+</footer>
+
+<script>
+  document.querySelectorAll('.copy').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const target = document.querySelector(btn.dataset.target);
+      if (!target) return;
+      try {
+        await navigator.clipboard.writeText(target.textContent.trim());
+        const orig = btn.textContent;
+        btn.textContent = 'copied';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1400);
+      } catch (e) {
+        btn.textContent = 'select & copy';
+      }
+    });
+  });
+</script>
+
+</body>
+</html>

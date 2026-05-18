@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 120" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+  <defs>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0fff8a"/>
+      <stop offset="100%" stop-color="#00a05a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Pager body — slightly lifted so it has shape on dark backgrounds -->
+  <rect x="14" y="22" width="120" height="76" rx="10" fill="#1a1f1c" stroke="#3a4540" stroke-width="2"/>
+  <!-- Screen -->
+  <rect x="26" y="34" width="96" height="34" rx="2" fill="url(#screen)"/>
+  <text x="74" y="56" font-size="14" font-weight="700" fill="#001a0c" text-anchor="middle" letter-spacing="2">PAGER</text>
+  <!-- Buttons -->
+  <circle cx="38" cy="84" r="3.5" fill="#666"/>
+  <circle cx="58" cy="84" r="3.5" fill="#666"/>
+  <circle cx="78" cy="84" r="3.5" fill="#666"/>
+  <circle cx="98" cy="84" r="3.5" fill="#666"/>
+  <circle cx="118" cy="84" r="3.5" fill="#e54"/>
+  <!-- Signal waves -->
+  <g stroke="#9aa8a0" stroke-width="2" fill="none" stroke-linecap="round">
+    <path d="M 142 48 q 8 12 0 24"/>
+    <path d="M 152 42 q 14 18 0 36"/>
+    <path d="M 162 36 q 20 24 0 48"/>
+  </g>
+
+  <!-- Word mark — light fill for dark backgrounds -->
+  <text x="192" y="58" font-size="32" font-weight="800" fill="#e7efe9">pager</text>
+  <text x="192" y="86" font-size="11" fill="#9aa8a0">remote sessions for Claude Code</text>
+</svg>
