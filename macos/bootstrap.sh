@@ -68,16 +68,26 @@ fi
 # pragmatic path: pyyaml is a single small library with no transitive deps,
 # and --user writes to ~/Library/Python/3.x/lib/python/site-packages (per-user,
 # not system).
+#
+# Important: bare `pip3` on a Mac may resolve to a pip older than 23.0.1 (no
+# --break-system-packages flag) — e.g. from a previous python install. We
+# always use `python3 -m pip` to bind to the python3 that bin/pager will
+# actually invoke, and we cascade flags so old-pip systems still work.
 log "4/11 pyyaml (Python inventory parser)"
+PY3="$(command -v python3 || true)"
+if [ -z "$PY3" ]; then
+  echo "ERROR: no python3 on PATH after step 2 — brew python@3.13 install didn't take" >&2
+  exit 1
+fi
 if python3 -c "import yaml" 2>/dev/null; then
-  ok "pyyaml already importable"
+  ok "pyyaml already importable ($PY3)"
+elif python3 -m pip install --user --break-system-packages --quiet pyyaml 2>/dev/null; then
+  ok "pyyaml installed via --break-system-packages ($PY3)"
+elif python3 -m pip install --user --quiet pyyaml 2>/dev/null; then
+  ok "pyyaml installed via plain --user ($PY3 — older pip, no PEP 668)"
 else
-  pip3 install --user --break-system-packages --quiet pyyaml
-  if python3 -c "import yaml" 2>/dev/null; then
-    ok "pyyaml installed to user site-packages"
-  else
-    warn "pyyaml installed but not importable — check 'python3 -m site --user-site' is on sys.path"
-  fi
+  warn "pyyaml install failed via $PY3. Try manually:"
+  warn "  $BREW_PREFIX/bin/python3.13 -m pip install --user --break-system-packages pyyaml"
 fi
 
 # 5. ~/pager/.env -------------------------------------------------------------
