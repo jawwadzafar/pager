@@ -51,6 +51,32 @@ On macOS Ventura+ (Tahoe is fine here), the OS shows an informational notificati
 
 If you click into that notification (or open **System Settings → General → Login Items & Extensions**), you'll see `pager` listed under **Allow in the Background**. The toggle defaults to **on**. **Don't turn it off** — that's the macOS-side kill-switch for the LaunchAgents.
 
+### The "tmux would like to access data from other apps" prompt
+
+This one is real and can be persistent. It's macOS Sonoma+'s **App Management** (cross-app data access) TCC permission, triggered because the watchdog LaunchAgent and the session LaunchAgent are technically two different launchd-spawned processes, and the watchdog's `tmux has-session` call touches the session's tmux server socket — macOS can interpret that as one app reaching into another's data.
+
+**Click "Allow."** Don't click "Don't Allow" — that will silently break the watchdog (it won't see the session, will think it's dead, will try to restart it in a loop).
+
+To make it stop asking forever, grant the permission permanently:
+
+```text
+System Settings → Privacy & Security → App Management → toggle tmux ON
+```
+
+If `tmux` isn't listed yet, run the watchdog manually once to trigger the prompt: `launchctl kickstart gui/$(id -u)/com.pager.watch`. Then it appears in the list and you can flip the toggle.
+
+You may also need (less common): **Privacy & Security → Files and Folders → tmux → "All".**
+
+If you just want pager to stop bothering you (e.g. you're going on vacation), use `pager stop`:
+
+```bash
+pager stop          # kills the session and pauses the watchdog
+pager stop --all    # also unloads the watchdog LaunchAgent itself
+pager start         # resumes everything
+```
+
+`pager stop` writes a `.stopped` file under `logs/`; the watchdog checks for it before every tick and exits as a noop if present, so no tmux calls fire and no TCC prompts appear while pager is stopped. `pager start` removes the file and resumes.
+
 ### If you accidentally denied something
 
 | What you denied | Symptom | How to recover |

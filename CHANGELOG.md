@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-05-19
+
+Hotfix released a few hours after 0.2.0 based on first real-Mac feedback.
+
+### Fixed
+- **`pager stop` is now persistent.** Previously, `pager stop` killed the session but the watchdog fired ~70s later, saw the session was gone, and respawned it — `stop` was effectively a no-op short of rebooting. Now `pager stop` touches a `logs/.stopped` semaphore file that the watchdog checks BEFORE making any tmux calls; if present, the watchdog logs a `manually-stopped` row and exits cleanly. `pager start` removes the semaphore and resumes.
+- This also fixes a macOS-specific pain: while pager is stopped, the watchdog no longer makes tmux calls, so the macOS App Management TCC prompt (`"tmux" would like to access data from other apps`) stops firing every 70 seconds.
+
+### Added
+- **`pager stop --all`** now also unloads the watchdog process itself (`launchctl bootout` on macOS, `systemctl --user stop pager-watch.timer` on Linux) — for "I want pager fully quiet, no ticks at all." Plain `pager stop` still pauses via the semaphore (lighter touch).
+- macos/README.md gained a dedicated section explaining the tmux TCC prompt, how to grant the permission permanently in System Settings, and the `pager stop` semantics as a way to silence pager without uninstalling.
+
 ## [0.2.0] — 2026-05-19
 
 macOS support — pager now runs natively on **macOS Tahoe 26** and **Sequoia 15**, both Apple Silicon and Intel.
@@ -126,6 +138,7 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/jawwadzafar/pager/releases/tag/v0.2.1
 [0.2.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.1.0

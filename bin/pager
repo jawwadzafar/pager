@@ -41,6 +41,14 @@ date_to_epoch() {
   python3 -c "from datetime import datetime; import sys; print(int(datetime.fromisoformat(sys.argv[1]).timestamp()))" "$1" 2>/dev/null || echo 0
 }
 
+# Stop-semaphore — touched by `pager stop`, removed by `pager start`.
+# The watchdog checks for this file BEFORE doing any tmux call and noops if
+# present. Without this, `pager stop` is non-persistent because the watchdog
+# fires 70s later, sees the session is gone, and respawns it. On macOS each
+# tmux call from the watchdog also triggers a TCC "access data from other
+# apps" prompt — the semaphore avoids both problems.
+_pager_stop_file() { printf '%s' "$__PAGER_ROOT/logs/.stopped"; }
+
 # ─── start: launch a session ────────────────────────────────────────────────
 cmd_start() {
   require tmux
@@ -50,11 +58,16 @@ cmd_start() {
 
   if tmux has-session -t "$session" 2>/dev/null; then
     echo "Session '$session' already running. Attach: pager attach $session"
+    # Clear the stop semaphore even if the session was already running — the
+    # user explicitly asked to start, so the watchdog should resume.
+    rm -f "$(_pager_stop_file)" 2>/dev/null || true
     return 0
   fi
 
   local log="$__PAGER_ROOT/logs/$session.log"
   mkdir -p "$(dirname "$log")"
+  # Clear the stop semaphore so the watchdog resumes health checks.
+  rm -f "$(_pager_stop_file)" 2>/dev/null || true
 
   local claude_cmd="claude --dangerously-skip-permissions"
   if [ -z "${PAGER_NO_REMOTE:-}" ]; then
@@ -81,21 +94,61 @@ cmd_attach() {
   exec tmux attach -t "$session"
 }
 
-# ─── stop: kill a session ──────────────────────────────────────────────────
+# ─── stop: kill a session and pause the watchdog ───────────────────────────
+# `pager stop` creates a `.stopped` semaphore in logs/ that the watchdog
+# checks on every tick. While the semaphore exists, the watchdog logs a
+# `manually-stopped` row to watch.csv and exits without touching tmux —
+# so the session stays dead and (on macOS) the TCC prompt doesn't fire.
+# `pager start` removes the semaphore.
 cmd_stop() {
   require tmux
+  local nuke_watchdog=0 session
   if [ "${1-}" = "--all" ]; then
+    # Touch the semaphore FIRST so any in-flight watchdog tick noops.
+    mkdir -p "$__PAGER_ROOT/logs"
+    touch "$(_pager_stop_file)"
     tmux ls 2>/dev/null | awk -F: '{print $1}' | while read -r s; do
       tmux kill-session -t "$s" && echo "Killed: $s"
     done
-    return 0
-  fi
-  local session="${1:-claude}"
-  if tmux has-session -t "$session" 2>/dev/null; then
-    tmux kill-session -t "$session"
-    echo "Killed session '$session'."
+    nuke_watchdog=1
+    session="(all)"
   else
-    echo "No session '$session' running."
+    session="${1:-claude}"
+    mkdir -p "$__PAGER_ROOT/logs"
+    touch "$(_pager_stop_file)"
+    if tmux has-session -t "$session" 2>/dev/null; then
+      tmux kill-session -t "$session"
+      echo "Killed session '$session'."
+    else
+      echo "No session '$session' running."
+    fi
+  fi
+  echo "Watchdog paused (logs/.stopped) — 'pager start' to resume."
+  # With --all, also unload the watchdog process itself so no ticks happen
+  # at all (helpful when you want to silence things completely on macOS).
+  if [ "$nuke_watchdog" = 1 ]; then
+    _watchdog_disable && echo "Watchdog process stopped (use 'pager start' or re-run bootstrap to re-enable)."
+  fi
+}
+
+# OS-aware watchdog process control. Used by `pager stop --all` to fully
+# silence the watchdog (not just pause it via the semaphore). Returns 0 if
+# the platform-specific call succeeded, 1 if no watchdog unit was loaded.
+_watchdog_disable() {
+  if [ "$PAGER_OS" = "mac" ]; then
+    launchctl bootout "gui/$(id -u)/com.pager.watch" 2>/dev/null
+  else
+    systemctl --user stop pager-watch.timer 2>/dev/null
+  fi
+}
+
+# Re-enable the watchdog process. Mirrors _watchdog_disable.
+_watchdog_enable() {
+  if [ "$PAGER_OS" = "mac" ]; then
+    [ -f "$HOME/Library/LaunchAgents/com.pager.watch.plist" ] || return 1
+    launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.pager.watch.plist" 2>/dev/null
+  else
+    systemctl --user start pager-watch.timer 2>/dev/null
   fi
 }
 
@@ -179,7 +232,6 @@ cmd_url() {
 #     (it could just have scrolled off the captured window). Once watch.csv
 #     captures real expiry events, refine the policy.
 cmd_watchdog() {
-  require tmux
   local session="${1:-claude}"
 
   local csv="$__PAGER_ROOT/logs/watch.csv"
@@ -188,8 +240,21 @@ cmd_watchdog() {
     echo "timestamp,session,tmux_alive,claude_pid,rc_banner_seen,age_sec,action" > "$csv"
   fi
 
-  local ts tmux_alive=false pane_pid="" claude_pid="" rc_banner=false age_sec="" action="noop"
+  local ts
   ts="$(date -Iseconds)"
+
+  # If the user ran `pager stop`, the semaphore is set. Log a noop row and
+  # exit BEFORE making any tmux calls — this prevents the macOS TCC prompt
+  # from firing every 70s while pager is intentionally stopped.
+  if [ -f "$(_pager_stop_file)" ]; then
+    printf '%s,%s,%s,%s,%s,%s,%s\n' \
+      "$ts" "$session" "false" "" "false" "" "manually-stopped" >> "$csv"
+    return 0
+  fi
+
+  require tmux
+
+  local tmux_alive=false pane_pid="" claude_pid="" rc_banner=false age_sec="" action="noop"
 
   if tmux has-session -t "$session" 2>/dev/null; then
     tmux_alive=true
