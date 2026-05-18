@@ -285,9 +285,9 @@ cat <<'EOF'
       time start without a login, enable auto-login in System Settings →
       Users & Groups (incompatible with FileVault). Linux's linger is not
       available on macOS without a LaunchDaemon (out of scope, phase 3).
-    • 'pager doctor' and 'pager status' currently print systemctl errors
-      on macOS — those sections will be fixed in a phase-2 change to
-      bin/pager. Everything else (start / attach / url / ssh / run) works.
+    • 'pager doctor' and 'pager status' are OS-aware on this branch —
+      doctor checks the LaunchAgents via launchctl; status is purely
+      tmux-based. No systemctl noise on macOS.
     • Uninstall:
         launchctl bootout gui/$(id -u)/com.pager.session
         launchctl bootout gui/$(id -u)/com.pager.watch

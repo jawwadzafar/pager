@@ -31,20 +31,20 @@ The script is **idempotent** — safe to re-run any time. It only does work that
 
 After bootstrap finishes, open a new terminal (or run `source ~/.zprofile && source ~/.zshrc`) and you should be able to run `pager`, `pager url`, etc.
 
-## What works in phase 1
+## What works
 
 | Command | Status |
 |---|---|
-| `pager start` | ✅ Works (tmux + claude, no platform-specific deps) |
+| `pager start` | ✅ Works (tmux + claude) |
 | `pager attach` | ✅ Works |
 | `pager url` | ✅ Works |
-| `pager watchdog` | ✅ Works (no systemd calls inside the watchdog itself) |
+| `pager watchdog` | ✅ Works |
 | `pager ssh` | ✅ Works once pyyaml is installed by bootstrap |
 | `pager run` | ✅ Works (uses the same ssh path) |
-| `pager doctor` | ⚠️ Partial — Services + Linger sections print `systemctl: command not found`. The other sections (deps, install/PATH, secrets, trust, sessions) are green. |
-| `pager status` | ⚠️ Partial — same systemctl noise at the bottom of the status output. |
+| `pager doctor` | ✅ Works — Services section uses `launchctl print gui/$(id -u)/com.pager.*`; linger is replaced with an informational "autostart at login" line |
+| `pager status` | ✅ Works (purely tmux-based, no service queries) |
 
-These two limitations will be fixed in phase 2 by teaching `bin/pager` to use `launchctl print` on Mac. Phase 1 deliberately does not touch `bin/pager` to keep the change surface minimal.
+`bin/pager` detects `uname -s` at runtime and branches between systemd (Linux) and launchd (macOS) for service-state queries. Two portable helpers (`file_mode`, `date_to_epoch`) replace `stat -c` / `date -d` calls that would have failed under BSD coreutils.
 
 ## Autostart semantics — login vs boot
 
