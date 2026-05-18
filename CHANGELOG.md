@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-05-19
+
+macOS support — pager now runs natively on **macOS Tahoe 26** and **Sequoia 15**, both Apple Silicon and Intel.
+
+### Added
+
+**macOS bootstrap**
+- New `macos/bootstrap.sh` — idempotent installer that mirrors the Linux bootstrap step-for-step. Detects arch (`arm64` → `/opt/homebrew`, `x86_64` → `/usr/local`), installs Homebrew if missing, then `brew install tmux libyaml python@3.13` and (optional) `brew install hudochenkov/sshpass/sshpass`.
+- `pyyaml` installed via `python3 -m pip install --user --break-system-packages` with a cascade fallback to plain `--user` for older pip — needed because Homebrew's `pyyaml` formula was disabled 2024-10-06 and modern Homebrew Python enforces PEP 668.
+- Wires `~/.zprofile` (`brew shellenv` + `~/.local/bin` PATH) and `~/.zshrc` (pager `.env` auto-source) instead of `~/.bashrc` / `~/.profile`.
+- `macos/launchd/com.pager.session.plist.template` + `macos/launchd/com.pager.watch.plist.template` — LaunchAgents replacing `pager.service` + `pager-watch.timer`. Templates substitute `__USER_HOME__` and `__BREW_BIN__` at install time (launchd doesn't expand `$HOME`).
+- Modern `launchctl bootstrap gui/$(id -u)` + `bootout` syntax for load/unload (not the legacy `load`/`unload`).
+- Session agent uses `KeepAlive { SuccessfulExit = false }` — restart on failure only, matching the Linux `Restart=on-failure` semantics.
+- Watch agent uses `StartInterval=70` to mirror the existing systemd timer cadence.
+
+**`bin/pager` cross-platform**
+- New `PAGER_OS` runtime detection (`mac` or `linux`) with branching in `cmd_doctor` (`Services` section uses `launchctl print gui/$UID/...` on macOS) and `cmd_help` (`Service` block shows the right command names per OS).
+- `cmd_doctor` linger check is replaced on macOS with an informational `autostart: at login (LaunchAgent — no boot-time equivalent on macOS)` line.
+- New portable helpers `file_mode()` (replaces `stat -c '%a'`) and `date_to_epoch()` (replaces `date -d`) built on `python3`, fixing silent BSD-coreutils failures on macOS.
+
+**Docs**
+- Root `README.md` install section split into **Linux (`apt`)** and **macOS (`brew`)** with two one-command install lines, expandable per-OS step-by-step breakdowns, and a platform badge update.
+- New `macos/README.md` covering: supported versions, what the bootstrap does, **macOS permissions you'll be asked for** (Mac password, Xcode CLT, Background Items toggle, firewall apps), what to do if a prompt is denied, login-vs-boot autostart caveat, common operations, uninstall recipe.
+- Website (`docs/index.html` + `docs/style.css`) refreshed: cross-platform tagline, two-OS install card grid, OS pill badges (Linux green / macOS blue), retro CRT touches — phosphor glow on the headline, subtle scanline + vignette overlay on the hero, glow on `✓` marks, drop-shadow on the new flow illustration.
+- New SVG `assets/flow.svg` (+ `flow-dark.svg`) — companion to the pager logo, showing the full flow: CRT monitor → signal waves → phone, in the same green-screen + chunky-bezel aesthetic. Shipped to `docs/` for the website too.
+
+### Changed
+
+- Platform badge in README now reads `Linux | macOS`.
+- Diagram in README + website: `Linux box` → `Your machine`.
+- Feature cards on the website: explicit "Linux + macOS" entry; service/watchdog cards mention both backends.
+
+### Notes
+
+- macOS autostart is at **login**, not at boot — LaunchAgent semantics. For closer-to-linger behavior, enable macOS auto-login (incompatible with FileVault). A LaunchDaemon for true boot-time start is intentionally out of scope.
+- `~/Library/LaunchAgents/com.pager.*.plist` ownership and `chmod 644` are required for launchctl to load them; bootstrap enforces this.
+- The macOS bootstrap pulls `python@3.13` for forward-looking pip support but the actual `python3` on PATH may stay as Apple's CLT 3.9 (Homebrew doesn't always create the unversioned symlink). pyyaml is installed for whichever `python3` is on PATH, so `bin/pager`'s inline yaml parsing stays self-consistent.
+
 ## [0.1.0] — 2026-05-19
 
 Initial public release.
@@ -88,5 +126,6 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.1.0

@@ -22,6 +22,25 @@ yellow() { printf '\033[33m%s\033[0m' "$*"; }
 err()     { echo "$(red ERROR): $*" >&2; exit 1; }
 require() { command -v "$1" >/dev/null || err "$1 not installed"; }
 
+# ─── platform helpers ──────────────────────────────────────────────────────
+# PAGER_OS is "mac" or "linux". Used to branch service-management calls
+# (systemctl vs launchctl) and to pick portable coreutils flags.
+PAGER_OS="linux"
+[ "$(uname -s)" = "Darwin" ] && PAGER_OS="mac"
+
+# file_mode FILE — print octal permission bits (e.g. "600"). Empty on error.
+# stat -c is GNU; stat -f is BSD; python is the simple portable answer.
+file_mode() {
+  python3 -c "import os,sys; print(oct(os.stat(sys.argv[1]).st_mode)[-3:])" "$1" 2>/dev/null
+}
+
+# date_to_epoch ISO8601 — print unix epoch seconds for an ISO 8601 timestamp.
+# `date -d` is GNU; BSD date needs -j -f with an explicit format. Python's
+# fromisoformat handles both colon and no-colon timezone offsets uniformly.
+date_to_epoch() {
+  python3 -c "from datetime import datetime; import sys; print(int(datetime.fromisoformat(sys.argv[1]).timestamp()))" "$1" 2>/dev/null || echo 0
+}
+
 # ─── start: launch a session ────────────────────────────────────────────────
 cmd_start() {
   require tmux
@@ -325,7 +344,8 @@ cmd_doctor() {
   printf '\n%s\n' "$(bold 'Secrets')"
   if [ -f "$__PAGER_ROOT/.env" ]; then
     local mode
-    mode="$(stat -c '%a' "$__PAGER_ROOT/.env" 2>/dev/null || echo '?')"
+    mode="$(file_mode "$__PAGER_ROOT/.env" || true)"
+    mode="${mode:-?}"
     if [ "$mode" = "600" ]; then
       pass ".env perms 600"
     else
@@ -358,31 +378,58 @@ PY
     warn "~/.claude.json not found" "First-run claude will create it; bootstrap.sh pre-trusts \$HOME"
   fi
 
-  # ── 5. systemd services ─────────────────────────────────────────────────
+  # ── 5. services (systemd on Linux, launchd on macOS) ────────────────────
   printf '\n%s\n' "$(bold 'Services')"
-  local svc_state timer_state
-  if systemctl --user list-unit-files pager.service 2>/dev/null | grep -q '^pager.service'; then
-    svc_state="$(systemctl --user is-active pager.service 2>/dev/null || true)"
-    case "$svc_state" in
-      active) pass "pager.service: active" ;;
-      *)      fail "pager.service: $svc_state" "systemctl --user start pager.service" ;;
-    esac
+  if [ "$PAGER_OS" = "mac" ]; then
+    local uid
+    uid="$(id -u)"
+    if [ -f "$HOME/Library/LaunchAgents/com.pager.session.plist" ]; then
+      if launchctl print "gui/$uid/com.pager.session" >/dev/null 2>&1; then
+        pass "com.pager.session: loaded"
+      else
+        fail "com.pager.session: not loaded" "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.pager.session.plist"
+      fi
+    else
+      warn "com.pager.session not installed" "re-run macos/bootstrap.sh"
+    fi
+    if [ -f "$HOME/Library/LaunchAgents/com.pager.watch.plist" ]; then
+      if launchctl print "gui/$uid/com.pager.watch" >/dev/null 2>&1; then
+        pass "com.pager.watch: loaded"
+      else
+        warn "com.pager.watch: not loaded" "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.pager.watch.plist"
+      fi
+    else
+      warn "com.pager.watch not installed" "re-run macos/bootstrap.sh"
+    fi
+    # LaunchAgents only run at login — no boot-time equivalent of linger.
+    # We report this as informational rather than warn, because "fix it" is
+    # "enable macOS auto-login" which is a personal choice, not a bug.
+    pass "autostart: at login (LaunchAgent — no boot-time equivalent on macOS)"
   else
-    warn "pager.service not installed" "make service  (or re-run bootstrap.sh)"
-  fi
-  if systemctl --user list-unit-files pager-watch.timer 2>/dev/null | grep -q '^pager-watch.timer'; then
-    timer_state="$(systemctl --user is-active pager-watch.timer 2>/dev/null || true)"
-    case "$timer_state" in
-      active) pass "pager-watch.timer: active" ;;
-      *)      warn "pager-watch.timer: $timer_state" "systemctl --user enable --now pager-watch.timer" ;;
-    esac
-  else
-    warn "pager-watch.timer not installed" "make watchdog  (or re-run bootstrap.sh)"
-  fi
-  if [ "$(loginctl show-user "$USER" -p Linger 2>/dev/null | cut -d= -f2)" = "yes" ]; then
-    pass "linger enabled (services start at boot)"
-  else
-    warn "linger not enabled — services won't start until first login" "sudo loginctl enable-linger \$USER"
+    local svc_state timer_state
+    if systemctl --user list-unit-files pager.service 2>/dev/null | grep -q '^pager.service'; then
+      svc_state="$(systemctl --user is-active pager.service 2>/dev/null || true)"
+      case "$svc_state" in
+        active) pass "pager.service: active" ;;
+        *)      fail "pager.service: $svc_state" "systemctl --user start pager.service" ;;
+      esac
+    else
+      warn "pager.service not installed" "make service  (or re-run bootstrap.sh)"
+    fi
+    if systemctl --user list-unit-files pager-watch.timer 2>/dev/null | grep -q '^pager-watch.timer'; then
+      timer_state="$(systemctl --user is-active pager-watch.timer 2>/dev/null || true)"
+      case "$timer_state" in
+        active) pass "pager-watch.timer: active" ;;
+        *)      warn "pager-watch.timer: $timer_state" "systemctl --user enable --now pager-watch.timer" ;;
+      esac
+    else
+      warn "pager-watch.timer not installed" "make watchdog  (or re-run bootstrap.sh)"
+    fi
+    if [ "$(loginctl show-user "$USER" -p Linger 2>/dev/null | cut -d= -f2)" = "yes" ]; then
+      pass "linger enabled (services start at boot)"
+    else
+      warn "linger not enabled — services won't start until first login" "sudo loginctl enable-linger \$USER"
+    fi
   fi
 
   # ── 6. watchdog freshness ───────────────────────────────────────────────
@@ -391,7 +438,7 @@ PY
   if [ -s "$csv" ]; then
     local last_ts now_epoch last_epoch age
     last_ts="$(tail -1 "$csv" | cut -d, -f1)"
-    last_epoch="$(date -d "$last_ts" +%s 2>/dev/null || echo 0)"
+    last_epoch="$(date_to_epoch "$last_ts")"
     now_epoch="$(date +%s)"
     age=$(( now_epoch - last_epoch ))
     if [ "$age" -lt 120 ]; then
@@ -399,7 +446,11 @@ PY
     elif [ "$age" -lt 600 ]; then
       warn "last watchdog tick ${age}s ago (timer interval is 60s — running late)"
     else
-      fail "last watchdog tick ${age}s ago (timer stalled?)" "systemctl --user status pager-watch.timer"
+      if [ "$PAGER_OS" = "mac" ]; then
+        fail "last watchdog tick ${age}s ago (timer stalled?)" "launchctl print gui/\$(id -u)/com.pager.watch"
+      else
+        fail "last watchdog tick ${age}s ago (timer stalled?)" "systemctl --user status pager-watch.timer"
+      fi
     fi
     local non_noop
     non_noop="$(awk -F, 'NR>1 && $7 != "noop" { n++ } END { print n+0 }' "$csv")"
@@ -429,6 +480,24 @@ PY
   else
     printf '%s failures: %d   warnings: %d\n' "$(red '✗')" "$fails" "$warns"
     return 1
+  fi
+}
+
+# Per-OS lines for the cmd_help Service block. Kept here (not in cmd_help)
+# so the heredoc stays a clean one-pass cat.
+__pager_help_service_block() {
+  if [ "$PAGER_OS" = "mac" ]; then
+    cat <<EOF
+  launchctl print gui/\$(id -u)/com.pager.session   $(dim "# autostart agent")
+  tail -F $__PAGER_ROOT/logs/launchd-session.{out,err} $(dim "# launchd-level logs")
+  launchctl print gui/\$(id -u)/com.pager.watch     $(dim "# watchdog agent")
+EOF
+  else
+    cat <<EOF
+  systemctl --user status pager.service       $(dim "# autostart unit")
+  journalctl --user -u pager.service          $(dim "# service logs")
+  systemctl --user status pager-watch.timer   $(dim "# watchdog timer")
+EOF
   fi
 }
 
@@ -470,10 +539,8 @@ $(bold "Files")
   Logs:       $__PAGER_ROOT/logs/
   Secrets:    $__PAGER_ROOT/.env  $(dim "(chmod 600, gitignored)")
 
-$(bold "Service")
-  systemctl --user status pager.service       $(dim "# autostart unit")
-  journalctl --user -u pager.service          $(dim "# service logs")
-  systemctl --user status pager-watch.timer   $(dim "# watchdog timer")
+$(bold "Service") $(dim "($PAGER_OS)")
+$(__pager_help_service_block)
   $__PAGER_ROOT/logs/watch.csv                $(dim "# watchdog state log")
 
 $(bold "Docs:")  $__PAGER_ROOT/README.md, $__PAGER_ROOT/CLAUDE.md

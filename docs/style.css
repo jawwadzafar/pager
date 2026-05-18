@@ -423,3 +423,140 @@ footer a:hover { color: var(--green); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Retro / CRT pass — phosphor glow, scanlines, vignette, OS tags
+   Added with the macOS-support release. CSS-only (no font imports).
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Hero gets a subtle CRT vignette + scanline overlay */
+.hero {
+  position: relative;
+  overflow: hidden;
+}
+.crt-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.35) 100%),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 2px,
+      rgba(15, 255, 138, 0.025) 2px,
+      rgba(15, 255, 138, 0.025) 3px
+    );
+}
+.hero > *:not(.crt-vignette) { position: relative; z-index: 1; }
+
+/* Phosphor text glow on the hero headline */
+.phosphor {
+  text-shadow:
+    0 0 1px rgba(15, 255, 138, 0.45),
+    0 0 12px rgba(15, 255, 138, 0.18);
+}
+
+/* Flow illustration — slot between hero and the next section */
+.flow-illustration {
+  display: block;
+  max-width: min(680px, 92%);
+  height: auto;
+  margin: 48px auto 0;
+  filter: drop-shadow(0 0 18px rgba(15, 255, 138, 0.12));
+}
+.flow-illustration img { max-width: 100%; height: auto; }
+
+/* OS install pair in hero */
+.os-install {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  margin: 0 auto 22px;
+  max-width: 100%;
+}
+.os-install .install-block {
+  margin: 0;
+  width: 100%;
+  max-width: 640px;
+}
+
+/* OS pill tags — sit at the start of an install block or card head */
+.os-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--green-soft);
+  color: var(--green);
+  border: 1px solid var(--green);
+  flex-shrink: 0;
+  text-shadow: 0 0 6px rgba(15, 255, 138, 0.35);
+}
+.os-tag-mac {
+  /* Slightly cooler shade for macOS so the eye distinguishes the two */
+  background: rgba(80, 140, 255, 0.12);
+  color: #6aa6ff;
+  border-color: #4b8aff;
+  text-shadow: 0 0 6px rgba(80, 140, 255, 0.35);
+}
+
+/* OS install grid in the Install section */
+.os-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 18px;
+  margin: 0 0 28px;
+}
+.os-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  transition: border-color 120ms ease;
+}
+.os-card:hover { border-color: var(--green-soft); }
+.os-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.os-card-sub {
+  color: var(--fg-faint);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+}
+.os-card .block {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+}
+.os-card-foot {
+  color: var(--fg-dim);
+  margin: 0;
+  font-size: 0.92rem;
+}
+.os-card-foot a { color: var(--green); }
+
+/* Phosphor accent on ✓ marks across terminal blocks */
+.t-ok {
+  text-shadow: 0 0 8px rgba(15, 255, 138, 0.35);
+}
+
+/* Soft glow on the green CTA button */
+.btn-primary {
+  box-shadow: 0 0 18px rgba(15, 255, 138, 0.18);
+}
+
+/* Responsive — keep retro effects readable on phones */
+@media (max-width: 720px) {
+  .flow-illustration { margin-top: 32px; max-width: 96%; }
+  .os-grid { grid-template-columns: 1fr; }
+  .crt-vignette { display: none; } /* scanlines can look noisy on small DPI screens */
+}

@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>pager — remote Claude Code sessions for any Linux box</title>
-<meta name="description" content="Turn any always-on Linux box into a remote-controllable Claude Code rig. Background tmux + Claude Code's --remote-control, driven from your phone. One-command install. MIT."/>
-<meta property="og:title" content="pager — remote Claude Code sessions for any Linux box"/>
-<meta property="og:description" content="Persistent tmux + Claude Code remote-control, driven from your phone. One-command install. MIT."/>
+<title>pager — remote Claude Code sessions for any Linux box or Mac</title>
+<meta name="description" content="Turn any always-on machine — Linux mini-PC, Mac mini, your daily MacBook — into a remote-controllable Claude Code rig. Background tmux + Claude Code's --remote-control, driven from your phone. One-command install. MIT."/>
+<meta property="og:title" content="pager — remote Claude Code sessions for any Linux box or Mac"/>
+<meta property="og:description" content="Persistent tmux + Claude Code remote-control on Linux or macOS, driven from your phone. One-command install. MIT."/>
 <meta property="og:type" content="website"/>
 <meta property="og:url" content="https://jawwadzafar.github.io/pager/"/>
 <link rel="icon" href="logo.svg" type="image/svg+xml"/>
@@ -30,17 +30,27 @@
 <main id="top">
 
 <section class="hero">
+  <div class="crt-vignette" aria-hidden="true"></div>
   <img src="logo.svg" alt="pager logo" class="logo" width="280" height="105"/>
-  <h1>Remote Claude Code sessions, from your phone.</h1>
+  <h1 class="phosphor">Remote Claude Code sessions, from your phone.</h1>
   <p class="tagline">
-    Turn any always-on Linux box into a Claude Code rig you carry in your pocket.
+    Turn any always-on machine — Linux mini-PC, Mac mini, your daily MacBook —
+    into a Claude Code rig you carry in your pocket.
     Background tmux + Claude Code's built-in <code>--remote-control</code>.
     No SSH tunnel. No port forward. No relay you don't already trust.
   </p>
 
-  <div class="install-block">
-    <span class="prompt">$</span><code class="install-line">git clone https://github.com/jawwadzafar/pager.git ~/pager &amp;&amp; ~/pager/bootstrap.sh</code>
-    <button class="copy" data-target=".install-line" aria-label="Copy install command">copy</button>
+  <div class="os-install">
+    <div class="install-block" data-os="linux">
+      <span class="os-tag">Linux</span>
+      <span class="prompt">$</span><code class="install-line">git clone https://github.com/jawwadzafar/pager.git ~/pager &amp;&amp; ~/pager/bootstrap.sh</code>
+      <button class="copy" data-target="[data-os='linux'] .install-line" aria-label="Copy Linux install command">copy</button>
+    </div>
+    <div class="install-block" data-os="mac">
+      <span class="os-tag os-tag-mac">macOS</span>
+      <span class="prompt">$</span><code class="install-line">git clone https://github.com/jawwadzafar/pager.git ~/pager &amp;&amp; ~/pager/macos/bootstrap.sh</code>
+      <button class="copy" data-target="[data-os='mac'] .install-line" aria-label="Copy macOS install command">copy</button>
+    </div>
   </div>
 
   <div class="cta-row">
@@ -48,7 +58,12 @@
     <a class="btn" href="#walkthrough">How it works</a>
   </div>
 
-  <p class="meta">MIT licensed · Bash + systemd · works on Ubuntu / Debian / any modern Linux</p>
+  <p class="meta">MIT · Bash · works on Linux (systemd) and macOS (launchd, Tahoe&nbsp;26 / Sequoia&nbsp;15)</p>
+
+  <picture class="flow-illustration">
+    <source media="(prefers-color-scheme: dark)" srcset="flow-dark.svg"/>
+    <img src="flow.svg" alt="" aria-hidden="true" width="640" height="240"/>
+  </picture>
 </section>
 
 <section id="walkthrough" class="section">
@@ -56,8 +71,8 @@
 
   <pre class="diagram" aria-hidden="true">
   ┌─────────────────┐     ┌─────────────────┐     ┌────────────────────┐
-  │  Linux box      │     │  claude.ai      │     │  Your phone        │
-  │  (this repo)    │ ──► │  relay          │ ──► │  claude.ai/code    │
+  │  Your machine   │     │  claude.ai      │     │  Your phone        │
+  │  Linux or Mac   │ ──► │  relay          │ ──► │  claude.ai/code    │
   │                 │     │                 │     │                    │
   │  tmux: claude   │     │  session_…      │     │  attached!         │
   │  --remote-      │     │                 │     │                    │
@@ -66,9 +81,13 @@
 
   <ol class="steps">
     <li>
-      <strong>Install on the box (once).</strong>
-      <code class="block">git clone https://github.com/jawwadzafar/pager.git ~/pager &amp;&amp; ~/pager/bootstrap.sh</code>
-      Installs deps, wires the shell, enables linger, starts <code>pager.service</code>. A tmux session named <code>claude</code> is already running <code>claude --remote-control</code>.
+      <strong>Install on your machine (once).</strong>
+      <code class="block">git clone https://github.com/jawwadzafar/pager.git ~/pager
+# Linux:
+~/pager/bootstrap.sh
+# macOS:
+~/pager/macos/bootstrap.sh</code>
+      Installs deps via <code>apt</code> (Linux) or <code>brew</code> (macOS), wires the shell, registers the service or LaunchAgent. A tmux session named <code>claude</code> is already running <code>claude --remote-control</code>.
     </li>
     <li>
       <strong>Get the URL.</strong>
@@ -90,19 +109,23 @@
   <div class="features">
     <article>
       <h3>One-command install</h3>
-      <p><code>bootstrap.sh</code> is idempotent — apt prereqs, env, PATH, Claude Code trust flag, systemd unit, linger, watchdog. Re-run anytime; only fixes what's missing.</p>
+      <p>Idempotent <code>bootstrap.sh</code> (Linux, <code>apt</code>) or <code>macos/bootstrap.sh</code> (macOS, <code>brew</code>). Prereqs, env, PATH, Claude Code trust flag, service or LaunchAgent, watchdog. Re-run anytime; only fixes what's missing.</p>
+    </article>
+    <article>
+      <h3>Linux + macOS</h3>
+      <p>Native on both. Linux uses <code>systemd --user</code> with <code>loginctl enable-linger</code> for boot-time start. macOS uses LaunchAgents that start at login (Tahoe&nbsp;26 / Sequoia&nbsp;15, Apple Silicon and Intel both). Same single <code>bin/pager</code> binary either way — it detects the OS at runtime.</p>
     </article>
     <article>
       <h3>Survives reboots</h3>
-      <p>A user-level systemd service with linger enabled brings the session back at boot, before any login. Your phone URL stays current.</p>
+      <p>A user-level service brings the session back automatically. On Linux that's <code>linger</code>-enabled boot-time start; on macOS it's the login-time LaunchAgent. Your phone URL stays current either way.</p>
     </article>
     <article>
       <h3>Self-healing watchdog</h3>
-      <p><code>pager-watch.timer</code> ticks every 60s, logs session state to <code>logs/watch.csv</code>, and restarts a dead session automatically.</p>
+      <p>A timer ticks every ~70s (<code>pager-watch.timer</code> on Linux, <code>com.pager.watch</code> LaunchAgent on macOS), logs session state to <code>logs/watch.csv</code>, and restarts a dead session automatically.</p>
     </article>
     <article>
       <h3>One-command diagnosis</h3>
-      <p><code>pager doctor</code> walks the full install — deps, PATH shadowing, .env perms, trust flag, services, linger, watchdog freshness — with a fix hint on every failure.</p>
+      <p><code>pager doctor</code> walks the full install — deps, PATH shadowing, .env perms, trust flag, OS-aware service checks (systemctl or launchctl), watchdog freshness — with a fix hint on every failure.</p>
     </article>
     <article>
       <h3>Multiple sessions</h3>
@@ -153,13 +176,32 @@
 
 <section id="install" class="section install-section">
   <h2>Install</h2>
+
+  <div class="os-grid">
+    <article class="os-card">
+      <header class="os-card-head">
+        <span class="os-tag">Linux</span>
+        <span class="os-card-sub">Debian, Ubuntu, any modern <code>apt</code> box</span>
+      </header>
+      <code class="block">git clone https://github.com/jawwadzafar/pager.git ~/pager
+~/pager/bootstrap.sh</code>
+      <p class="os-card-foot">Installs <code>tmux</code>, <code>sshpass</code>, <code>python3-yaml</code> via <code>apt</code>. Registers <code>pager.service</code> + <code>pager-watch.timer</code>. Enables linger so it starts at boot before any login.</p>
+    </article>
+
+    <article class="os-card">
+      <header class="os-card-head">
+        <span class="os-tag os-tag-mac">macOS</span>
+        <span class="os-card-sub">Tahoe&nbsp;26 / Sequoia&nbsp;15, Apple Silicon or Intel</span>
+      </header>
+      <code class="block">git clone https://github.com/jawwadzafar/pager.git ~/pager
+~/pager/macos/bootstrap.sh</code>
+      <p class="os-card-foot">Installs Homebrew (if missing), then <code>brew install tmux libyaml python@3.13</code> + optional <code>hudochenkov/sshpass</code>. Registers <code>com.pager.session</code> + <code>com.pager.watch</code> LaunchAgents. Starts at login. <a href="https://github.com/jawwadzafar/pager/blob/main/macos/README.md">macOS notes →</a></p>
+    </article>
+  </div>
+
   <ol class="install-steps">
     <li>
-      <p>On any Ubuntu/Debian/modern-Linux box:</p>
-      <code class="block">git clone https://github.com/jawwadzafar/pager.git ~/pager &amp;&amp; ~/pager/bootstrap.sh</code>
-    </li>
-    <li>
-      <p>Open a new shell (or <code>source ~/.bashrc</code>), then:</p>
+      <p>Open a new shell (or <code>source ~/.bashrc</code> on Linux / <code>source ~/.zprofile</code> on macOS), then:</p>
       <code class="block">pager doctor   <span class="dim"># everything green?</span>
 pager url      <span class="dim"># phone URL</span></code>
     </li>
@@ -167,6 +209,7 @@ pager url      <span class="dim"># phone URL</span></code>
       <p>Open that URL on a phone signed into the same claude.ai account. Done.</p>
     </li>
   </ol>
+
   <p class="footer-cta">
     Full docs, CLI reference, and design notes live in the
     <a href="https://github.com/jawwadzafar/pager">repo README</a>.

@@ -13,7 +13,7 @@
   <a href="https://jawwadzafar.github.io/pager/"><img src="https://img.shields.io/badge/site-jawwadzafar.github.io%2Fpager-0fff8a" alt="site"/></a>
   <img src="https://img.shields.io/badge/tests-20%2F20%20local-success" alt="tests pass locally"/>
   <img src="https://img.shields.io/badge/shell-bash-89e051.svg" alt="Bash"/>
-  <img src="https://img.shields.io/badge/platform-Linux-blue" alt="Linux"/>
+  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-blue" alt="Linux | macOS"/>
   <img src="https://img.shields.io/badge/install-one--command-success" alt="one-command install"/>
 </p>
 
@@ -34,7 +34,7 @@
  remote sessions for Claude Code · MIT
 ```
 
-**pager** turns any always-on Linux box into a remote-controllable Claude Code rig. Background tmux + Claude Code's built-in `--remote-control`, so any phone signed into your claude.ai account drives the same shell, with the same context, with no SSH tunnel, no port forward, no third-party relay.
+**pager** turns any always-on machine — a Linux mini-PC under your desk, an old Mac mini in the closet, your daily-driver MacBook, a homelab box — into a remote-controllable Claude Code rig. Background tmux + Claude Code's built-in `--remote-control`, so any phone signed into your claude.ai account drives the same shell, with the same context, with no SSH tunnel, no port forward, no third-party relay.
 
 Bundles a small inventory-driven SSH helper for operating on your fleet (workstations, home servers, VPSes) from inside the always-on session — credentials read from `.env`, never echoed.
 
@@ -46,7 +46,7 @@ Bundles a small inventory-driven SSH helper for operating on your fleet (worksta
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌────────────────────┐
-│  Linux box      │     │  claude.ai      │     │  Your phone        │
+│  Your machine   │     │  claude.ai      │     │  Your phone        │
 │  (this repo)    │ ◄── │  relay          │ ◄── │  claude.ai/code    │
 │                 │     │                 │     │                    │
 │  tmux: claude   │     │  session_…      │     │  attached!         │
@@ -83,23 +83,38 @@ Each session is independent — separate context, separate URL, separate log at 
 
 ---
 
-## ⚡ Install on a fresh Linux box (one command)
+## ⚡ Install (one command)
+
+### Linux (Debian / Ubuntu, `apt`)
 
 ```bash
 git clone https://github.com/jawwadzafar/pager.git ~/pager && ~/pager/bootstrap.sh
 ```
 
-That's it. `bootstrap.sh` is **idempotent** — safe to re-run any time, it only does work that's missing. It:
+Uses **`apt`** for prereqs (`tmux`, `sshpass`, `python3-yaml`, `openssh-client`, `curl`, `ca-certificates`) and **`systemd --user`** units for autostart. Linger (`loginctl enable-linger`) makes the service run at boot before login.
 
-1. Installs apt prereqs (`tmux`, `sshpass`, `python3-yaml`, `openssh-client`, `curl`, `ca-certificates`)
-2. Creates `~/pager/.env` from `.env.example` (chmod 600, gitignored)
-3. Wires `~/.bashrc` to auto-source `~/pager/.env` and put `~/pager/bin` on `PATH`
-4. Reports SSH-key passphrase state with the exact fix command if needed
-5. **Pre-trusts `$HOME` in `~/.claude.json`** so the autostart session isn't blocked by Claude Code's first-run "Trust this folder?" prompt
-6. Installs the `pager.service` systemd user unit
-7. Enables linger (so the service runs at boot, before any login)
-8. Starts the service
-9. Prints the live phone-accessible Remote Control URL
+### macOS (Tahoe 26 / Sequoia 15, `brew`)
+
+```bash
+git clone https://github.com/jawwadzafar/pager.git ~/pager && ~/pager/macos/bootstrap.sh
+```
+
+Uses **Homebrew** for prereqs (`tmux`, `libyaml`, `python@3.13`, optional `sshpass` from the `hudochenkov/sshpass` tap) and **LaunchAgents** for autostart. Both Apple Silicon (`/opt/homebrew`) and Intel (`/usr/local`) are detected automatically. Autostart fires at **login** (LaunchAgent semantics) — see [`macos/README.md`](macos/README.md) for the permissions you'll be asked for, the auto-login caveat, and the full uninstall recipe.
+
+Both scripts are **idempotent** — safe to re-run any time, only does work that's missing.
+
+<details>
+<summary>What the Linux bootstrap does, step by step</summary>
+
+1. Installs apt prereqs.
+2. Creates `~/pager/.env` from `.env.example` (chmod 600, gitignored).
+3. Wires `~/.bashrc` to auto-source `~/pager/.env` and puts `~/.local/bin` on `PATH`.
+4. Reports SSH-key passphrase state with the exact fix command if needed.
+5. **Pre-trusts `$HOME` in `~/.claude.json`** so the autostart session isn't blocked by Claude Code's first-run "Trust this folder?" prompt.
+6. Installs the `pager.service` systemd user unit + `pager-watch.timer`.
+7. Enables linger (so the service runs at boot, before any login).
+8. Starts the service.
+9. Prints the live phone-accessible Remote Control URL.
 
 After it finishes:
 1. `source ~/.bashrc` (or open a new shell) to pick up env + PATH
@@ -107,7 +122,26 @@ After it finishes:
 3. `pager url` — get the phone URL
 4. `$EDITOR ~/pager/.env` — fill in `GH_TOKEN`, optional `SUDO_PASSWORD`, any `*_SSH_PASS`
 
-### Going fully unattended
+</details>
+
+<details>
+<summary>What the macOS bootstrap does, step by step</summary>
+
+1. Installs Homebrew if missing (the installer prompts for your Mac password — see [`macos/README.md`](macos/README.md#permissions-youll-be-asked-for)).
+2. `brew install tmux libyaml python@3.13`.
+3. `brew install hudochenkov/sshpass/sshpass` (optional; non-fatal if tap is unreachable).
+4. Installs `pyyaml` via `python3 -m pip install --user` (with a cascade for old/new pip).
+5. Creates `~/pager/.env` from `.env.example` (chmod 600, gitignored).
+6. Symlinks `~/.local/bin/pager` → `~/pager/bin/pager`.
+7. Wires `~/.zprofile` (brew shellenv + `~/.local/bin` PATH) and `~/.zshrc` (`.env` auto-source).
+8. Reports SSH-key passphrase state with the exact fix command if needed.
+9. **Pre-trusts `$HOME` in `~/.claude.json`**.
+10. Renders the two plist templates with your home dir + brew prefix, loads them via `launchctl bootstrap gui/$(id -u)`.
+11. Verifies: `launchctl print`, `tmux ls`, prints the live Remote Control URL.
+
+</details>
+
+### Going fully unattended (Linux)
 
 `bootstrap.sh` needs `sudo` for two steps (apt install, enable-linger). It supports two paths:
 
@@ -117,6 +151,8 @@ After it finishes:
 | `SUDO_PASSWORD` is **not** set | `bootstrap.sh` falls back to interactive sudo — prompts you once. |
 
 Set `SUDO_PASSWORD` in `~/pager/.env` before the first run for a fully unattended setup, or set it after the first run and re-run `bootstrap.sh` to avoid prompts on subsequent invocations. The value is never echoed.
+
+On macOS, the only sudo step is Homebrew's own installer (and only on a Mac where brew isn't already present). After that, every step is user-scope (`brew install`, `pip --user`, `launchctl gui/$UID`) — no further prompts.
 
 ---
 
@@ -167,10 +203,10 @@ make url                # phone-accessible Remote Control URL(s)
 ```
 
 Two install paths:
-- **`./bootstrap.sh`** — full setup on a fresh box (apt, env, service, linger). The "I want this always-on" path.
-- **`make install`** — just put the `pager` binary on `PATH` (symlink). The "I want the CLI tool" path. No systemd, no linger. Pair with `make service` if you also want autostart.
+- **`./bootstrap.sh`** (Linux) or **`./macos/bootstrap.sh`** (macOS) — full setup on a fresh machine (apt/brew, env, service+linger or LaunchAgent). The "I want this always-on" path.
+- **`make install`** — just put the `pager` binary on `PATH` (symlink). The "I want the CLI tool" path. No service, no autostart. Pair with `make service` (Linux) or `./macos/bootstrap.sh` (macOS) if you also want autostart.
 
-Both are idempotent.
+All are idempotent.
 
 ---
 
