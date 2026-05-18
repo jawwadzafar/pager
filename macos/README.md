@@ -70,12 +70,22 @@ You may also need (less common): **Privacy & Security → Files and Folders → 
 If you just want pager to stop bothering you (e.g. you're going on vacation), use `pager stop`:
 
 ```bash
-pager stop          # kills the session and pauses the watchdog
+pager stop          # kills the session AND pauses the watchdog (semaphore)
 pager stop --all    # also unloads the watchdog LaunchAgent itself
 pager start         # resumes everything
 ```
 
 `pager stop` writes a `.stopped` file under `logs/`; the watchdog checks for it before every tick and exits as a noop if present, so no tmux calls fire and no TCC prompts appear while pager is stopped. `pager start` removes the file and resumes.
+
+If you want the OPPOSITE — kill the session but let the watchdog bring it right back (useful when you want a fresh `claude` process to load new MCP servers / settings):
+
+```bash
+pager kill          # kills session, watchdog respawns at next tick
+pager restart       # kill + start immediately, don't wait for the watchdog
+pager restart --all # also bounces the watchdog process (when it's in a weird state)
+```
+
+Mental model: **start** = up. **stop** = down and stays down. **kill** = down, watchdog resurrects. **restart** = kick.
 
 ### If you accidentally denied something
 

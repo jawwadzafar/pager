@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-05-19
+
+Follow-up to 0.2.1 — adds `kill` and `restart` so users have the full set of session-control verbs, not just `stop` (which now also pauses the watchdog).
+
+### Added
+- **`pager kill [name|--all]`** — kills a session WITHOUT setting the stop semaphore. The watchdog will respawn at the next tick. This is the v0.2.0 `stop` behavior, now under its own verb. Use it when you want to force a fresh `claude` process and let the watchdog bring it back automatically.
+- **`pager restart [name|--all]`** — kill + start, immediately. Doesn't wait for the watchdog. `--all` additionally bounces the watchdog process (`launchctl bootout`/`bootstrap` on macOS, `systemctl --user stop`/`start pager-watch.timer` on Linux) — useful when the watchdog itself is in a weird state. Always clears the stop semaphore.
+
+### Mental model
+- `start` — bring it up. Clears semaphore.
+- `stop` — bring it down and keep it down. Sets semaphore.
+- `kill` — bring it down, but the watchdog will resurrect it. Doesn't touch semaphore.
+- `restart` — kick the session right now. Clears semaphore. `--all` also bounces the watchdog.
+
 ## [0.2.1] — 2026-05-19
 
 Hotfix released a few hours after 0.2.0 based on first real-Mac feedback.
@@ -138,7 +152,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/jawwadzafar/pager/releases/tag/v0.2.2
 [0.2.1]: https://github.com/jawwadzafar/pager/releases/tag/v0.2.1
 [0.2.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.1.0

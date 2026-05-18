@@ -152,6 +152,59 @@ _watchdog_enable() {
   fi
 }
 
+# ─── kill: drop a session WITHOUT pausing the watchdog ─────────────────────
+# Same shape as the old (v0.2.0) `pager stop`. Use this when you want the
+# watchdog to immediately respawn the session — e.g. to force a fresh claude
+# process. Contrast with `pager stop`, which sets the semaphore so the
+# watchdog stays paused after the kill.
+cmd_kill() {
+  require tmux
+  if [ "${1-}" = "--all" ]; then
+    tmux ls 2>/dev/null | awk -F: '{print $1}' | while read -r s; do
+      tmux kill-session -t "$s" && echo "Killed: $s"
+    done
+    echo "(Watchdog still active — sessions will be respawned at next tick. Use 'pager stop' to keep them down.)"
+    return 0
+  fi
+  local session="${1:-claude}"
+  if tmux has-session -t "$session" 2>/dev/null; then
+    tmux kill-session -t "$session"
+    echo "Killed session '$session'. (Watchdog will respawn at next tick.)"
+  else
+    echo "No session '$session' running."
+  fi
+}
+
+# ─── restart: kill + start immediately ─────────────────────────────────────
+# Doesn't wait for the watchdog. With --all, also bounces the watchdog
+# process itself (helpful when the watchdog LaunchAgent / timer is in a
+# weird state). Clears the stop semaphore.
+cmd_restart() {
+  require tmux
+  if [ "${1-}" = "--all" ]; then
+    tmux ls 2>/dev/null | awk -F: '{print $1}' | while read -r s; do
+      tmux kill-session -t "$s" >/dev/null 2>&1 || true
+      echo "Killed: $s"
+    done
+    _watchdog_disable >/dev/null 2>&1 || true
+    sleep 1
+    rm -f "$(_pager_stop_file)" 2>/dev/null || true
+    cmd_start claude
+    if _watchdog_enable >/dev/null 2>&1; then
+      echo "Watchdog reloaded."
+    fi
+    echo "Restarted (all sessions + watchdog)."
+    return 0
+  fi
+  local session="${1:-claude}"
+  if tmux has-session -t "$session" 2>/dev/null; then
+    tmux kill-session -t "$session"
+    echo "Killed: $session"
+  fi
+  rm -f "$(_pager_stop_file)" 2>/dev/null || true
+  cmd_start "$session"
+}
+
 # ─── status: list running sessions ─────────────────────────────────────────
 cmd_status() {
   if ! command -v tmux >/dev/null; then
@@ -574,10 +627,18 @@ $(bold "pager") $(dim "— persistent remote-session toolkit for Claude Code")
 $(bold "Usage:")  pager $(dim "<command>") $(dim "[args]")
 
 $(bold "Session commands")
-  $(bold "start")  $(dim "[name]")             start a tmux session (default 'claude') running
-                              claude --remote-control + bypass perms
-  $(bold "attach") $(dim "[name]")             attach terminal to <name> ($(dim "detach: Ctrl-b d"))
-  $(bold "stop")   $(dim "[name|--all]")       kill one session or all
+  $(bold "start")   $(dim "[name]")            start a tmux session (default 'claude') running
+                              claude --remote-control + bypass perms. Clears the
+                              stop semaphore so the watchdog resumes.
+  $(bold "attach")  $(dim "[name]")            attach terminal to <name> ($(dim "detach: Ctrl-b d"))
+  $(bold "stop")    $(dim "[name|--all]")      kill a session and PAUSE the watchdog (writes
+                              logs/.stopped). --all also unloads the watchdog
+                              process itself. 'pager start' to resume.
+  $(bold "kill")    $(dim "[name|--all]")      kill a session WITHOUT pausing the watchdog —
+                              watchdog will respawn it at the next tick.
+                              Use this to force a fresh claude process.
+  $(bold "restart") $(dim "[name|--all]")      kill + start immediately. --all also bounces
+                              the watchdog process. Clears the stop semaphore.
   $(bold "status")                     list running tmux sessions
   $(bold "url")    $(dim "[name|--all]")       print phone-accessible claude.ai URL(s)
   $(bold "watchdog") $(dim "[name]")           one-tick health check; restart session if dead.
@@ -618,6 +679,8 @@ case "${1-}" in
   start|bg)            shift; cmd_start "$@" ;;
   attach)              shift; cmd_attach "$@" ;;
   stop)                shift; cmd_stop "$@" ;;
+  kill)                shift; cmd_kill "$@" ;;
+  restart)             shift; cmd_restart "$@" ;;
   status|ls)           shift; cmd_status "$@" ;;
   url)                 shift; cmd_url "$@" ;;
   watchdog)            shift; cmd_watchdog "$@" ;;
