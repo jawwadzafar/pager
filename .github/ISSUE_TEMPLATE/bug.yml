@@ -1,0 +1,62 @@
+name: Bug report
+description: Something in pager isn't working the way it should.
+title: "[bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Before you start, please run
+        `pager doctor` — it covers most install/config issues and the output
+        is the single most useful thing you can paste below.
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: pager doctor output
+      description: Paste the full output of `pager doctor`.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what did you see instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: Commands to reproduce. Smallest sequence that triggers it.
+      render: shell
+
+  - type: input
+    id: pager-version
+    attributes:
+      label: pager version / commit
+      description: Output of `pager version` (or `git -C ~/pager rev-parse --short HEAD`).
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS + version
+      description: e.g. Ubuntu 24.04, Debian 12, Arch
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        Anything useful from:
+        - `journalctl --user -u pager.service -n 100`
+        - `tail -50 ~/pager/logs/watch.csv`
+        - `tail -50 ~/pager/logs/claude.log`
+      render: shell
