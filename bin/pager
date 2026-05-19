@@ -152,6 +152,42 @@ _watchdog_enable() {
   fi
 }
 
+# ─── autostart: install/remove the LaunchAgent (Mac) or systemd unit (Linux) ──
+# As of v0.6.0, the default bootstrap no longer installs the autostart
+# unit. Users opt in here, accepting the macOS first-login TCC prompt
+# storm (or the linger / login-time start on Linux) in exchange for
+# pager surviving reboots. Backed by lib/autostart.sh — same code path
+# both bootstraps use when run with --autostart.
+cmd_autostart() {
+  # shellcheck source=../lib/autostart.sh
+  # shellcheck disable=SC1091
+  . "$__PAGER_ROOT/lib/autostart.sh"
+  case "${1:-status}" in
+    enable)        autostart_enable ;;
+    disable|off)   autostart_disable ;;
+    status|"")     autostart_status ;;
+    -h|--help)
+      cat <<EOF
+$(bold "pager autostart") $(dim "[enable | disable | status]")
+
+  $(bold "enable")     install the autostart unit so pager comes back at login.
+              macOS:  LaunchAgent at ~/Library/LaunchAgents/com.pager.agent.plist
+              Linux:  systemd --user pager.service + pager-watch.timer
+              First-time enable on macOS triggers a stack of TCC prompts —
+              see macos/README.md for the safe-to-deny list.
+  $(bold "disable")    remove the autostart unit. pager.service / LaunchAgent gone.
+              Sessions you started manually with 'pager start' keep running.
+  $(bold "status")     print whether autostart is enabled (default if no arg).
+
+Default install does NOT enable autostart. You opt in with 'enable' once,
+which is the only time the TCC prompt storm on macOS happens. After that,
+choices are remembered.
+EOF
+      ;;
+    *) echo "$(red "Unknown subcommand:") $1  (use --help for usage)" >&2; return 1 ;;
+  esac
+}
+
 # ─── uninstall: tear down system integration ──────────────────────────────
 # Reverses everything macos/bootstrap.sh or Linux bootstrap.sh installed,
 # WITHOUT touching the repo directory or your .env (so secrets are safe).
@@ -830,6 +866,14 @@ $(bold "Remote ops")
   $(bold "ssh")    $(dim "<alias> [cmd]")      SSH to a host from inventory.yaml using creds from .env
   $(bold "run")    $(dim "<alias> <action>")   run actions/<action>.sh on a remote host
 
+$(bold "Autostart") $(dim "(opt-in; default install does NOT register it)")
+  $(bold "autostart")                  show whether autostart is enabled
+  $(bold "autostart enable")           install LaunchAgent (Mac) / systemd unit (Linux)
+                              for "comes back at login". Triggers macOS TCC
+                              prompts the first time.
+  $(bold "autostart disable")          remove the autostart unit. Sessions you
+                              started manually keep running.
+
 $(bold "Other")
   $(bold "uninstall") $(dim "[-y]")            tear down system integration (services, symlink,
                               shell rc lines). Keeps the repo + .env intact.
@@ -862,6 +906,7 @@ case "${1-}" in
   stop)                shift; cmd_stop "$@" ;;
   kill)                shift; cmd_kill "$@" ;;
   restart)             shift; cmd_restart "$@" ;;
+  autostart)           shift; cmd_autostart "$@" ;;
   uninstall)           shift; cmd_uninstall "$@" ;;
   status|ls)           shift; cmd_status "$@" ;;
   url)                 shift; cmd_url "$@" ;;

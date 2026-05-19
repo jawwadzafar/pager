@@ -5,7 +5,26 @@ All notable changes to **pager** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased] — dev branch
+
+**`pager autostart` subcommand + cleaner separation of "register the unit" vs "run the install."** Autostart stays on by default (that's the whole pitch — "Claude Code that never sleeps"), but you can now toggle it without re-bootstrapping, opt out at install time, and the docs are honest about the macOS TCC prompt cost.
+
+### Added
+- **`pager autostart [enable | disable | status]`** subcommand. OS-aware: on macOS installs the LaunchAgent + copies the .app bundle into `~/Applications` + ad-hoc codesigns + lsregisters; on Linux installs the systemd `--user` units + enables + starts. `status` returns 0 if enabled, 1 if disabled. Backed by the new `lib/autostart.sh`.
+- **`lib/autostart.sh`** — shared functions (`autostart_enable`, `autostart_disable`, `autostart_status`) sourced by both bootstraps AND `bin/pager`, so the same code path runs whether autostart is being set up at install time or toggled later.
+- **`--no-autostart` flag** on `macos/bootstrap.sh`, `linux/bootstrap.sh`, and `install.sh`. Pass-through from the curl one-liner with `sh -s -- --no-autostart`. Skip the LaunchAgent / systemd registration entirely; pager runs only when you type `pager start`.
+- **macOS bootstrap pre-warns** about the TCC prompt storm right before triggering it, so users see the explanation in terminal scrollback as the dialogs pop. Tells them exactly which one to Allow (`tmux` App Management) and which are safe to deny (Full Disk Access, Music, Photos, Contacts, Documents).
+
+### Changed
+- **Default behavior stays the same**: autostart is registered at install time. `--no-autostart` opts out.
+- **Refresh-but-don't-disable**: if a prior install had autostart enabled, re-bootstrapping refreshes the plist / units rather than removing them. Re-bootstrapping for an upgrade no longer silently kills your autostart.
+- Bootstrap step count consolidated: macOS now ends at "10/10 autostart" (was 11/11), Linux at "8/8 verify" (was 10/10). The "install systemd units" and "enable linger" and "start service" steps fold into the single autostart step.
+- `bin/pager` help: new "Autostart" section in `cmd_help` covers `enable`, `disable`, `status`.
+- `macos/README.md` permission-prompt section reworded to honestly explain "this is what you'll see on first login" + `--no-autostart` as the escape hatch for users who don't want it.
+- Website hero copy mentions the `--no-autostart` option without burying the lede on the default behavior.
+
+### Notes
+- This dev branch is not tagged until end-to-end verified on a real Mac. Merge to `main` + tag `v0.6.0` happens once that's confirmed clean.
 
 ## [0.5.7] — 2026-05-19
 
