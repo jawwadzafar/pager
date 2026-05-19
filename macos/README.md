@@ -51,6 +51,25 @@ On macOS Ventura+ (Tahoe is fine here), the OS shows an informational notificati
 
 If you click into that notification (or open **System Settings → General → Login Items & Extensions**), you'll see `pager` listed under **Allow in the Background**. The toggle defaults to **on**. **Don't turn it off** — that's the macOS-side kill-switch for the LaunchAgents.
 
+### The "Bypass Permissions mode" warning on attach
+
+When you `pager attach`, the first thing you'll see in the pane is a red warning from Claude Code itself:
+
+```
+WARNING: Claude Code running in Bypass Permissions mode
+…
+This mode should only be used in a sandboxed container/VM…
+By proceeding, you accept all responsibility…
+```
+
+**This is normal and expected, not a pager bug.** pager launches claude with `--dangerously-skip-permissions` on purpose: there's no human at the keyboard when the LaunchAgent fires at login, so without that flag claude would hang on the first dangerous-operation prompt waiting for input that never comes.
+
+Tradeoffs you should know about:
+
+- claude will run shell commands, file edits, etc. **without asking** while pager-started. Same as if you typed `claude --dangerously-skip-permissions` yourself.
+- The banner is loud the first time you attach. After that it scrolls off.
+- If you really don't want this: opt out at start time with `PAGER_NO_DANGEROUS=1 pager start <name>`. Claude will then ask before doing anything dangerous — but the background watchdog can't answer those prompts, so the session may stall. Use this only for sessions you actively attach to.
+
 ### After first login on macOS: what the prompts mean
 
 The bootstrap registers a LaunchAgent so pager comes back at every login. **The first time it actually fires (next login after install), macOS will pop up a stack of TCC permission prompts.** This is a **one-time event** — your choices are remembered, every login after that is quiet. The avalanche is the cost of having an unsigned background tool (no Apple Developer ID); same prompts hit Ollama, brew-services entries, every other community CLI.
