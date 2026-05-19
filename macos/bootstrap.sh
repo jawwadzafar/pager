@@ -61,6 +61,15 @@ log()  { printf "\n\033[1;36m==>\033[0m %s\n" "$*"; }
 ok()   { printf "    \033[32m✓\033[0m %s\n" "$*"; }
 warn() { printf "    \033[33m!\033[0m %s\n" "$*"; }
 
+# 0. Soft claude check — pager isn't useful without it, but a missing
+# claude binary often means "installed via npm but PATH not refreshed
+# yet" rather than "user actually forgot." Warn and continue.
+if ! command -v claude >/dev/null 2>&1; then
+  warn "claude (Claude Code CLI) not found on PATH."
+  warn "  Install: https://claude.com/code   (or: npm install -g @anthropic-ai/claude-code)"
+  warn "  pager will install; you'll need claude before 'pager start' will work."
+fi
+
 # 1. HOMEBREW -----------------------------------------------------------------
 log "1/11 Homebrew"
 if ! command -v brew >/dev/null 2>&1 && [ ! -x "$BREW_PREFIX/bin/brew" ]; then

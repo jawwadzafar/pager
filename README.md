@@ -11,10 +11,12 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT"/></a>
   <a href="https://jawwadzafar.github.io/pager/"><img src="https://img.shields.io/badge/site-jawwadzafar.github.io%2Fpager-0fff8a" alt="site"/></a>
-  <img src="https://img.shields.io/badge/tests-20%2F20%20local-success" alt="tests pass locally"/>
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs welcome"/></a>
+  <img src="https://img.shields.io/badge/tests-23%2F23%20local-success" alt="tests pass locally"/>
   <img src="https://img.shields.io/badge/shell-bash-89e051.svg" alt="Bash"/>
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-blue" alt="Linux | macOS"/>
   <img src="https://img.shields.io/badge/install-one--command-success" alt="one-command install"/>
+  <img src="https://img.shields.io/badge/maintained-yes-success.svg" alt="maintained"/>
 </p>
 
 <p align="center">
@@ -602,9 +604,42 @@ That requires a network path to this box (Tailscale or similar) but doesn't depe
 
 MIT — see [LICENSE](LICENSE). Use it, fork it, ship your own variant.
 
-## Contributing / Issues
+## Contributing
 
-This is a small personal toolkit released as-is. Issues and PRs welcome but no SLA — the maintainer is one person.
+PRs welcome. Quickstart:
+
+```bash
+git clone https://github.com/jawwadzafar/pager.git
+cd pager
+make check               # shellcheck + smoke tests (must stay green)
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for project layout, how to add a subcommand, where things go. Quick file-tour:
+
+| Path | What's there |
+|---|---|
+| `bin/pager` | The single binary. Bash, ~600 lines, dispatcher + subcommands. |
+| `lib/sudo.sh` | Askpass helper for scripts that need root. |
+| `lib/autostart.sh` | Shared OS-aware autostart enable/disable/status. |
+| `bootstrap.sh` | Thin OS-detecting dispatcher → `linux/` or `macos/` bootstrap. |
+| `install.sh` | The `curl \| sh` entry point. POSIX-portable. |
+| `linux/bootstrap.sh` + `linux/systemd/*` | Debian/Ubuntu install path. |
+| `macos/bootstrap.sh` + `macos/launchd/*` + `macos/pager.app/` | macOS install path. |
+| `tests/smoke.sh` | 23 checks, fully sandboxed. `make test`. |
+| `docs/` | Website at https://jawwadzafar.github.io/pager — pure HTML+CSS+SVG. |
+
+### Open opportunities
+
+Real, well-scoped places where PRs would land cleanly:
+
+- **Linux distro support** beyond Debian/Ubuntu (Fedora/RHEL via `dnf`, Arch via `pacman`, openSUSE via `zypper`, Alpine via `apk`). Touch points: `linux/bootstrap.sh` step 1 (package install) + package name mapping in a new `linux/packages.sh` lib. The bootstrap already detects non-apt PMs and fails clearly with this same hint.
+- **Homebrew formula** for `pager` so Mac users can `brew install pager` instead of `curl \| sh`. Tap or core, your call.
+- **Cross-platform real-time log viewer** — `pager logs --follow` that tails `logs/claude.log` with pretty colors. Currently it's just `tail -F`.
+- **Per-session env overrides** via a `--env KEY=VAL` flag on `pager start`.
+- **Investigate the macOS Login Items icon issue** — see [CHANGELOG v0.5.7](CHANGELOG.md#057--2026-05-19) for the rabbit hole. Likely needs a real Apple Developer ID to solve. If someone has one, codesigning the bundle with a real Team ID may resolve it.
+- **Smoke tests for the macOS side.** Current `tests/smoke.sh` is Linux-only (uses tmux + bash, but runs against real macos/bootstrap.sh side effects would need a fixture).
+
+Open an issue first for anything big; small fixes can go straight to PR. By contributing you agree to the project's [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ---
 
