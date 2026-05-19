@@ -101,7 +101,12 @@
       <span class="prompt">$</span><code class="install-line">curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh</code>
       <button class="copy" data-target="[data-os='any'] .install-line" aria-label="Copy install command">copy</button>
     </div>
-    <p class="install-sub">One command. Detects your OS, clones to <code>~/.pager</code>, installs deps, and registers autostart so the session survives reboots. Add <code>sh -s -- --no-autostart</code> if you'd rather start it manually.</p>
+    <div class="install-block" data-os="windows">
+      <span class="os-tag os-tag-win">Windows <small>(alpha)</small></span>
+      <span class="prompt">PS&gt;</span><code class="install-line">irm https://raw.githubusercontent.com/jawwadzafar/pager/main/install.ps1 | iex</code>
+      <button class="copy" data-target="[data-os='windows'] .install-line" aria-label="Copy Windows install command">copy</button>
+    </div>
+    <p class="install-sub">One command per platform. Clones to <code>~/.pager</code> (Linux/Mac) or <code>%USERPROFILE%\.pager</code> (Windows), installs deps, and registers autostart so the session survives reboots. Windows is pure native PowerShell &mdash; no WSL needed.</p>
   </div>
 
   <div class="cta-row">
@@ -246,6 +251,14 @@
         <span class="os-card-sub">Tahoe&nbsp;26 / Sequoia&nbsp;15, Apple Silicon or Intel</span>
       </header>
       <p class="os-card-foot">Installs Homebrew (if missing), then <code>brew install tmux libyaml python@3.13</code> + optional <code>hudochenkov/sshpass</code>. Registers <code>com.pager.agent</code> LaunchAgent. Starts at login. <a href="https://github.com/jawwadzafar/pager/blob/main/macos/README.md">macOS notes →</a></p>
+    </article>
+
+    <article class="os-card">
+      <header class="os-card-head">
+        <span class="os-tag os-tag-win">Windows <small>(alpha)</small></span>
+        <span class="os-card-sub">Win10 / Win11, PowerShell 5.1+ &mdash; no WSL</span>
+      </header>
+      <p class="os-card-foot">Installs Git + OpenSSH + Python via <code>winget</code>. Wires <code>$PROFILE</code>, pre-trusts <code>$env:USERPROFILE</code> in <code>~/.claude.json</code>, registers a <code>pager</code> Scheduled Task at logon. <code>pager attach</code> becomes <code>pager logs</code> (read-only tail); everything else (start/stop/status/url/trust/autostart/uninstall) is identical to Linux/Mac.</p>
     </article>
   </div>
 

@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0-alpha] — 2026-05-19
+
+**Native Windows port (no WSL).** Alpha: tagged but NOT a GitHub Release — v0.6.9 stays the "Latest Release" badge until Windows has gone through real-user testing on a Win10 + Win11 box.
+
+### Added — Windows native install
+- **`install.ps1`** — PowerShell entry point. `irm https://raw.githubusercontent.com/jawwadzafar/pager/main/install.ps1 | iex`. Mirrors `install.sh`'s shape: preflight banner explaining the 5 steps, env knobs (`PAGER_REPO`, `PAGER_BRANCH`, `PAGER_HOME`, `PAGER_NO_AUTOSTART`), clone via git, auto-install git via winget if missing, soft-warn if claude isn't on PATH, hand off to `windows/bootstrap.ps1`.
+- **`windows/bootstrap.ps1`** — 7-step idempotent setup:
+  1. Dependencies via winget: Git, OpenSSH Client (Windows Capability), Python.
+  2. `logs\` directory.
+  3. `.env` from `.env.example`.
+  4. `$PROFILE` wiring: auto-load `.env`, define `function pager { & "...\bin\pager.ps1" @args }`.
+  5. Pre-trust `$env:USERPROFILE` in `~/.claude.json` (same JSON shape as bash bootstrap).
+  5b. Honor `PAGER_TRUST_PATHS` (`;` or `:` separated) for extra pre-trusted dirs.
+  6. SSH key informational check.
+  7. Register Scheduled Task `pager` triggered AtLogOn, with battery + restart settings.
+- **`bin/pager.ps1`** — PowerShell mirror of `bin/pager`. Same command surface:
+  - `start [name] [--cwd DIR]` — spawn claude in background via `Start-Process -WindowStyle Hidden`, redirect stdout/stderr to `logs\<name>.log`/`.err`, write PID file. Auto-trusts launch dir same as bash version.
+  - `stop [name]` / `kill [name]` — `Stop-Process -Force` + cleans PID file. (`kill` is currently an alias for `stop`; Windows has no watchdog/semaphore yet.)
+  - `status` — table of pager-managed processes from PID files.
+  - `url [name]` — greps the log for `claude.ai/code/session_…`.
+  - `logs [name]` — replaces `attach`. `Get-Content -Tail 50 -Wait`. Read-only.
+  - `trust [--check|--reset] PATH ...` — same multi-path semantics, same JSON shape.
+  - `autostart enable|disable|status` — Scheduled Task wrapper.
+  - `info` — full state summary.
+  - `doctor` — health check (no `--fix` yet on Windows; alpha scope).
+  - `uninstall [-y]` — removes Scheduled Task, stops running sessions, strips `# pager: auto-load` block from `$PROFILE` with timestamped backup, leaves repo + .env in place.
+  - `help` — full command reference.
+- **README** + **website** updated with Windows install one-liner and uninstall recipe.
+
+### Honest deviations from Linux/Mac
+- **No tmux + no watchdog yet.** `pager attach` is replaced by `pager logs` (read-only tail). For interactive PTY attach, use WSL2 + the Linux installer. The Scheduled Task's built-in `RestartInterval=2min, RestartCount=3` is the only restart-on-crash mechanism in this alpha.
+- **`kill` is an alias for `stop`** (no `.stopped` semaphore needed without a watchdog).
+- **No `pager ssh` inventory support on Windows yet.** Python + pyyaml are installed by bootstrap, but the inline YAML parsing of `cmd_ssh` isn't ported. Coming in a follow-up.
+- **No `doctor --fix`** on Windows yet. `doctor` reports state only.
+
+### Compatibility
+- PowerShell 5.1 (default on Win10/11) and PowerShell 7+ both supported. No PS7-only syntax (`?.`, `??`) used.
+- Pure additive: zero edits to `install.sh`, `bin/pager` (bash), `linux/bootstrap.sh`, `macos/bootstrap.sh`, or any shared file. Existing Linux/macOS installs are unaffected.
+
+### Why alpha (and not "Latest")
+The earlier macOS port went through "report from Mac user → fix" cycles for several rev numbers before stabilizing. Same expected here. v0.6.9 stays the GitHub "Latest Release" badge. v0.7.0-alpha is a git tag only — re-run `irm ... | iex` on the same box after any tag bump and it's idempotent.
+
 ## [0.6.9] — 2026-05-19
 
 Self-healing diagnostics + sharper error messages.
