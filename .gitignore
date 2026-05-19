@@ -199,6 +199,5 @@ docs/_site/
 pager-fresh-install.log
 pager.pre-install-*/
 
-# Compiled C launcher binary (built by macos/bootstrap.sh from pager.c).
-# Source is committed; the universal Mach-O output is per-install.
-macos/pager.app/Contents/MacOS/pager
+# (v0.5.6 briefly compiled a C launcher here. v0.5.7 reverted to a
+# committed shell shim, so no gitignore entry for this path.)

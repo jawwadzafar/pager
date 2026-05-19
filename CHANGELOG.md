@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.7] — 2026-05-19
+
+Revert the C launcher experiment + finally tell users honestly what to expect on first login.
+
+### Changed
+- **Reverted `macos/pager.app/Contents/MacOS/pager` from a compiled C Mach-O binary back to a shell shim.** The v0.5.6 hypothesis was that a Mach-O launcher would let macOS render the Login Items icon; real-Mac test after restart confirmed the icon still doesn't render. Same root cause as before — BTM tags ad-hoc-signed bundles as "Unknown Developer" regardless of executable type. Compiling in bootstrap was added complexity (clang dependency, build step, gitignored artifact) for zero functional gain, and may have been making the macOS TCC permission storm WORSE on first login by triggering more Gatekeeper checks against the Mach-O. Shell shim is simpler, fewer prompts, equally non-fixing of the icon.
+- Removed `macos/pager.app/Contents/MacOS/pager.c` and the clang compile step in `macos/bootstrap.sh`. `.gitignore` entry for the compiled binary path also removed since the shim is now committed at that path.
+- `Info.plist` `CFBundleVersion` bumped to `0.5.7`.
+
+### Added
+- **macos/README.md now has a clear "After first login: the permission-prompt storm" section** explaining what macOS prompts users will see on first run, which to **Allow** (the App Management / tmux one — that's the only critical one), and which to **Don't Allow** (Music, Photos, Contacts, Documents, Full Disk Access — pager doesn't need any of them). Honest framing: this is what unsigned-by-Apple-Developer-ID looks like on Tahoe; the same prompt storm hits Ollama, brew-services entries, and every other community-distributed background tool. **Choices are remembered, so subsequent logins are quiet — the avalanche is once per fresh install.**
+
+### Accepting the icon limitation
+- The Login Items icon never started rendering despite our six iterations (v0.5.0 .app bundle → v0.5.1 OG polish → v0.5.2 hotfix → v0.5.3 symlink → v0.5.4 AssociatedBundleIdentifiers → v0.5.5 copy instead of symlink → v0.5.6 Mach-O launcher). The BTM dump on a real Tahoe install showed `Parent Identifier: Unknown Developer`, which is the field that drives the "Item from unidentified developer" label *and* the fallback to a generic exec icon. Both are tied to whether the bundle is signed by an Apple Developer ID, not whether the bundle is structurally correct. **Without paying Apple $99/year, this is what macOS does for any community-distributed CLI.** Fine — pager works, the .app bundle is honest about what it is, the docs explain the situation. We're not chasing this further.
+
 ## [0.5.6] — 2026-05-19
 
 **Mach-O launcher binary.** v0.5.5 finally got the bundle indexed (`mdfind` confirmed `kMDItemCFBundleIdentifier == "com.pager.agent"` returned the path), but Login Items still showed the generic exec icon. Real-Mac diagnostics with `qlmanage`:
@@ -416,7 +431,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.5.6...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.5.7...HEAD
+[0.5.7]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.7
 [0.5.6]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.6
 [0.5.5]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.5
 [0.5.4]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.4

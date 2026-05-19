@@ -282,27 +282,11 @@ ok "Rendered com.pager.agent.plist"
 # copy at ~/Applications/pager.app is purely metadata; actual execution
 # routes back to the canonical install at $PAGER_ROOT/bin/pager.
 
-# Compile the C launcher to a real Mach-O binary BEFORE copying the
-# bundle. This is what 0.5.6 added — Tahoe refused to render icons for
-# bundles whose Contents/MacOS executable is a shell script (qlmanage
-# would hang on the bundle while succeeding on the .icns individually).
-# clang ships with Xcode CLT, which Homebrew already requires, so this
-# is a hard dependency we already pay for.
-PAGER_C_SRC="$__PAGER_ROOT/macos/pager.app/Contents/MacOS/pager.c"
-PAGER_C_OUT="$__PAGER_ROOT/macos/pager.app/Contents/MacOS/pager"
-if [ -f "$PAGER_C_SRC" ]; then
-  if ! command -v clang >/dev/null 2>&1; then
-    err "clang not found — needed to build the pager.app launcher. Run:  xcode-select --install"
-    exit 1
-  fi
-  # Universal binary: one file runs on both arm64 (Apple Silicon) and
-  # x86_64 (Intel). -O2 because the binary is tiny; -mmacosx-version-min
-  # sets the deployment target so the binary loads on Sequoia (15) too.
-  clang -arch arm64 -arch x86_64 -O2 -mmacosx-version-min=11.0 \
-    -o "$PAGER_C_OUT" "$PAGER_C_SRC" 2>/dev/null
-  chmod +x "$PAGER_C_OUT"
-  ok "Compiled universal pager launcher (arm64 + x86_64)"
-fi
+# (v0.5.6 compiled a C launcher into the .app here. v0.5.7 reverted to
+# a committed shell shim — both worked functionally, but the Mach-O
+# launcher didn't deliver the hoped-for Login Items icon fix, while
+# adding a compile step and triggering more macOS TCC permission
+# prompts on first run. Simpler shim wins.)
 
 APPS_DIR="$HOME/Applications"
 mkdir -p "$APPS_DIR"

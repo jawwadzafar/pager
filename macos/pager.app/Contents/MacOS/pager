@@ -1,0 +1,32 @@
+#!/bin/sh
+# pager.app launcher -- thin shell shim that exec's the real pager binary.
+#
+# Why this file exists:
+#   The LaunchAgent's ProgramArguments points at this launcher (inside
+#   the .app bundle), not at bin/pager directly. Going through the .app
+#   bundle is what lets macOS attach the Info.plist name + AppIcon.icns
+#   to the Login Items row. The actual code still lives at $PAGER_ROOT/
+#   bin/pager -- this is just a redirector.
+#
+# Notes:
+#   - v0.5.6 briefly replaced this script with a compiled C binary to
+#     try to fix Login Items icon rendering. The binary didn't help --
+#     macOS's BTM tags ad-hoc-signed bundles as "Unknown Developer"
+#     regardless of executable type, and the icon stays generic. v0.5.7
+#     reverts to this shell version (simpler, fewer moving parts,
+#     fewer macOS TCC permission prompts on first run).
+#   - PAGER_ROOT is set in the LaunchAgent's EnvironmentVariables and
+#     substituted at install time. If absent, derive from $HOME.
+
+set -eu
+
+if [ -n "${PAGER_ROOT:-}" ]; then
+    real="$PAGER_ROOT/bin/pager"
+elif [ -n "${HOME:-}" ]; then
+    real="$HOME/.pager/bin/pager"
+else
+    here=$(cd "$(dirname "$0")" && pwd)
+    real="$here/../../../../bin/pager"
+fi
+
+exec "$real" "$@"

@@ -51,6 +51,26 @@ On macOS Ventura+ (Tahoe is fine here), the OS shows an informational notificati
 
 If you click into that notification (or open **System Settings → General → Login Items & Extensions**), you'll see `pager` listed under **Allow in the Background**. The toggle defaults to **on**. **Don't turn it off** — that's the macOS-side kill-switch for the LaunchAgents.
 
+### After first login: the permission-prompt storm (don't be scared)
+
+On your first login *after* the bootstrap installs the LaunchAgent, macOS may pop up a stack of permission prompts as the agent fires for the first time. People report seeing as many as 5–7 prompts in quick succession:
+
+| Prompt | Safe to click | Why |
+|---|---|---|
+| `"tmux" would like to access data from other apps` (App Management) | **Allow** | Needed for the watchdog to talk to the tmux server. See next subsection for the deeper explanation. |
+| `"pager" would like Full Disk Access` | **Don't Allow** | pager doesn't need it. Whatever macOS thought was about to read your whole disk wasn't real. |
+| `"pager" / "tmux" would like to access your Music` | **Don't Allow** | Nothing pager does touches Music. macOS prompts defensively. |
+| `"pager" / "tmux" would like to access your Photos` | **Don't Allow** | Same — pager doesn't read Photos. |
+| `"pager" / "tmux" would like to access your Contacts / Calendars` | **Don't Allow** | Not used. |
+| `"pager" / "tmux" would like to access files in your Documents / Downloads / Desktop` | **Don't Allow** *(unless you actually plan to run `pager ssh` against an inventory that lives in Documents)* | claude reads/writes `~/.claude.json` and `~/pager/.env` only by default; neither lives in those user-folder TCC zones. |
+| `"pager" was added to Login Items running in the background` | informational, no buttons | Not a deny prompt. Just macOS telling you it registered the LaunchAgent. |
+
+**Why so many.** macOS Tahoe shows TCC prompts on first-touch for nearly every "user data" folder if the requesting process isn't signed by an Apple Developer ID. pager is ad-hoc-signed (we don't want to charge $99/yr for an open-source tool), so it triggers the cautious path. The same prompt storm happens for any unsigned background tool you've ever installed (Ollama, brew-services entries, etc.).
+
+**What if I clicked Don't Allow on the App Management one (the tmux prompt).** That's the one prompt you DO need to Allow. If you denied it, the watchdog can't talk to the tmux server, can't tell if the session is alive, and will try to restart it in a loop. Fix: **System Settings → Privacy & Security → App Management → toggle `tmux` ON**. Then `launchctl kickstart gui/$(id -u)/com.pager.agent` to fire a fresh watchdog tick.
+
+**If the prompt storm bothers you on every reboot.** Once you Allow / Don't Allow each, the choice is remembered. After your first cleanup pass, future logins should be quiet. The avalanche is a once-per-fresh-install event.
+
 ### The "tmux would like to access data from other apps" prompt
 
 This one is real and can be persistent. It's macOS Sonoma+'s **App Management** (cross-app data access) TCC permission, triggered because the watchdog LaunchAgent and the session LaunchAgent are technically two different launchd-spawned processes, and the watchdog's `tmux has-session` call touches the session's tmux server socket — macOS can interpret that as one app reaching into another's data.
