@@ -236,6 +236,14 @@ else
   printf '  \033[31m✗\033[0m trust round-trip (check, set, check, reset, check)\n'; fail=$((fail+1))
 fi
 
+# 9c2. `pager start --cwd <bad-dir>` should fail with a clear error.
+total=$((total+1))
+if env PAGER_NO_REMOTE=1 "$PAGER" start smoke-cwd-test --cwd /this/does/not/exist >/dev/null 2>&1; then
+  printf '  \033[31m✗\033[0m start: --cwd nonexistent fails\n'; fail=$((fail+1))
+else
+  printf '  \033[32m✓\033[0m start: --cwd nonexistent fails\n'; pass=$((pass+1))
+fi
+
 # 9d. `pager info` should render without errors and include a version line.
 # Custom check rather than check_output because info's stdout is long enough
 # to trip SIGPIPE (exit 141) when grep -q closes the pipe early under
