@@ -223,11 +223,12 @@ EOF
         printf '  %s removed ~/Library/LaunchAgents/%s.plist\n' "$(green ✓)" "$label"
       fi
     done
-    # Remove the ~/Applications/pager.app symlink that bootstrap creates
-    # so LaunchServices stops showing pager in Login Items.
-    if [ -L "$HOME/Applications/pager.app" ]; then
-      rm -f "$HOME/Applications/pager.app"
-      printf '  %s removed ~/Applications/pager.app symlink\n' "$(green ✓)"
+    # Remove the ~/Applications/pager.app entry that bootstrap installs
+    # (was a symlink in v0.5.3-0.5.4, a real copy from v0.5.5 onward).
+    # rm -rf handles both cases.
+    if [ -L "$HOME/Applications/pager.app" ] || [ -d "$HOME/Applications/pager.app" ]; then
+      rm -rf "$HOME/Applications/pager.app"
+      printf '  %s removed ~/Applications/pager.app\n' "$(green ✓)"
     fi
   else
     local unit

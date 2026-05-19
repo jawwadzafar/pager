@@ -260,54 +260,74 @@ ok "Rendered com.pager.agent.plist"
 
 # 10c. Make Login Items render the pager icon + display name.
 #
-# Three things have to be true for macOS to show our icon + "pager"
-# label (instead of the generic exec icon + "Item from unidentified
-# developer"):
+# What it takes for macOS to show our icon + "pager" label instead of
+# the generic exec icon + "Item from unidentified developer":
 #
 #   1. The LaunchAgent plist has an AssociatedBundleIdentifiers key
-#      (added in macOS Ventura 13) pointing at the bundle's
-#      CFBundleIdentifier. Already in the template.
-#   2. macOS LaunchServices has indexed a bundle with that ID. We
-#      ensure that by symlinking the bundle into ~/Applications (a
-#      standard scan location) and calling lsregister -f on it.
-#   3. The bundle is "valid" enough for Gatekeeper. We ad-hoc
-#      codesign it so it has a signature, which improves Gatekeeper
-#      reliability on icon resolution.
+#      (macOS Ventura 13+) pointing at CFBundleIdentifier. Already in
+#      the template.
+#   2. LaunchServices has indexed a bundle with that ID, AND Spotlight
+#      can see it. **This is the part 0.5.0-0.5.4 got wrong.** A
+#      symlinked bundle into ~/Applications doesn't get indexed by
+#      Spotlight if the symlink target is inside a hidden directory
+#      (~/.pager). Confirmed via `mdfind kMDItemCFBundleIdentifier ==
+#      "com.pager.agent"` returning empty after the symlink approach.
+#      Fix: COPY the bundle as a real directory into ~/Applications.
+#      Spotlight then indexes it normally.
+#   3. The bundle is "valid" enough for Gatekeeper. Ad-hoc codesign
+#      it (no Apple Developer ID needed).
+#
+# The .app's Contents/MacOS/pager launcher uses $PAGER_ROOT (set in
+# the plist EnvironmentVariables) to find the real bin/pager — so the
+# copy at ~/Applications/pager.app is purely metadata; actual execution
+# routes back to the canonical install at $PAGER_ROOT/bin/pager.
 
-# Ad-hoc codesign the bundle so Gatekeeper considers it valid.
-# `-s -` means anonymous / ad-hoc signing (no Apple Developer ID needed).
-# `--force` overwrites any prior signature; `--deep` propagates to nested
-# code (we don't have any, but harmless). Errors are swallowed because
-# missing codesign on some minimal CLT installs shouldn't break install.
-if command -v codesign >/dev/null 2>&1; then
-  codesign --force --sign - "$__PAGER_ROOT/macos/pager.app" 2>/dev/null || true
-  ok "Ad-hoc codesigned pager.app"
-fi
-
-# Symlink the bundle into ~/Applications so LaunchServices indexes it.
-# The actual bundle stays in the repo — symlink is purely for indexing.
 APPS_DIR="$HOME/Applications"
 mkdir -p "$APPS_DIR"
-APP_LINK="$APPS_DIR/pager.app"
-if [ -L "$APP_LINK" ] || [ -e "$APP_LINK" ]; then
-  rm -f "$APP_LINK"
-fi
-ln -s "$__PAGER_ROOT/macos/pager.app" "$APP_LINK"
-ok "Symlinked $APP_LINK -> $__PAGER_ROOT/macos/pager.app"
+APP_COPY="$APPS_DIR/pager.app"
 
-# Force LaunchServices to register the bundle (both via the symlink and
-# the canonical path, since BTM lookup order is murky).
+# Wipe whatever's at APP_COPY (could be a stale symlink from 0.5.3+,
+# or an old copy from a prior 0.5.5+ run). rm -rf handles both cases.
+rm -rf "$APP_COPY"
+
+# Copy the bundle as a real directory. cp -R preserves structure,
+# permissions, and the executable bit on Contents/MacOS/pager. Adding
+# a -c (clone if APFS) would be slightly faster on Apple Silicon but
+# isn't portable to Intel — keep plain -R.
+cp -R "$__PAGER_ROOT/macos/pager.app" "$APP_COPY"
+ok "Copied pager.app -> $APP_COPY"
+
+# Ad-hoc codesign the COPY. The `-s -` identity is anonymous signing,
+# no Apple Developer ID needed. Improves Gatekeeper's icon-resolution
+# reliability — unsigned bundles can get treated as untrusted.
+if command -v codesign >/dev/null 2>&1; then
+  codesign --force --sign - "$APP_COPY" 2>/dev/null || true
+  ok "Ad-hoc codesigned $APP_COPY"
+fi
+
+# Force LaunchServices to register the copy. lsregister -f primes
+# both the LS database and the Spotlight metadata index, which is
+# what Login Items reads when looking up AssociatedBundleIdentifiers.
 lsregister="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
 if [ -x "$lsregister" ]; then
-  "$lsregister" -f "$APP_LINK" 2>/dev/null || true
-  "$lsregister" -f "$__PAGER_ROOT/macos/pager.app" 2>/dev/null || true
-  ok "Registered pager.app with LaunchServices (symlink + canonical)"
+  "$lsregister" -f "$APP_COPY" 2>/dev/null || true
+  ok "Registered $APP_COPY with LaunchServices"
 fi
+
+# Update the plist to point ProgramArguments at the copy too — keeps
+# everything pointing at one location (the indexable one). The
+# launcher inside still exec's $PAGER_ROOT/bin/pager via env, so
+# actual code lives in the canonical repo.
+sed -i.bak \
+  -e "s|$__PAGER_ROOT/macos/pager.app|$APP_COPY|g" \
+  "$HOME/Library/LaunchAgents/com.pager.agent.plist"
+rm -f "$HOME/Library/LaunchAgents/com.pager.agent.plist.bak"
 
 # 10d. Reload (bootout if loaded, then bootstrap). Modern launchctl 2 syntax.
 # bootout removes the BTM Login Items entry that pointed at the previous
-# plist; bootstrap creates a fresh entry that now includes
-# AssociatedBundleIdentifiers, so BTM looks up the icon via the bundle.
+# plist; bootstrap creates a fresh entry. Now BTM's icon-resolution path
+# can find an indexed bundle at ~/Applications/pager.app via the
+# AssociatedBundleIdentifiers key, and renders the icon + "pager" name.
 launchctl bootout "gui/$USER_UID/com.pager.agent" 2>/dev/null || true
 launchctl bootstrap "gui/$USER_UID" "$HOME/Library/LaunchAgents/com.pager.agent.plist"
 ok "com.pager.agent loaded"

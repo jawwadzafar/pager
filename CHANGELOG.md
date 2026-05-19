@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5] — 2026-05-19
+
+**The bundle was never actually getting indexed.** v0.5.4 added `AssociatedBundleIdentifiers` to the plist correctly, and ad-hoc codesigned the bundle correctly, and called `lsregister -f` correctly — but real-Mac diagnostics caught that `mdfind 'kMDItemCFBundleIdentifier == "com.pager.agent"'` returned **empty** after the install. LaunchServices/Spotlight never actually indexed the bundle. With no indexed bundle for that ID, `AssociatedBundleIdentifiers` has nothing to resolve to, and Login Items falls back to generic exec.
+
+### Fixed
+- **Bootstrap step 10c now COPIES the bundle into `~/Applications/pager.app`** as a real directory, instead of symlinking it. Root cause: Spotlight's indexer skips paths inside hidden directories, and apparently won't follow a symlink to index a target inside `~/.pager/`. Even after `lsregister -f` "succeeded," `mdfind` confirmed the bundle never landed in the metadata DB. Copying as a real directory at the standard `~/Applications` location fixes the indexing.
+- Ad-hoc codesign now runs against the copy (not the canonical source).
+- `lsregister -f` runs against the copy.
+- The plist's `ProgramArguments` is updated post-render to point at the copy too, so everything routes through the indexable path.
+- `pager uninstall` switched from `rm -f` to `rm -rf` on `~/Applications/pager.app` since it's a directory now (handles both legacy symlinks and the new real dir).
+
+### Architecture note
+The .app at `~/Applications/pager.app` is purely metadata — its `Contents/MacOS/pager` launcher reads `$PAGER_ROOT` from the LaunchAgent's `EnvironmentVariables` and `exec`s `$PAGER_ROOT/bin/pager`. So one source of truth remains: the canonical install at `$PAGER_ROOT`. The bundle copy at `~/Applications/` is what macOS looks at; the actual code lives at `~/.pager/bin/pager`.
+
+### Migration
+1. `cd ~/.pager && git pull`
+2. `sfltool resetbtm` (only needed once if you didn't reset between iterations)
+3. `./macos/bootstrap.sh` — this is the bootstrap that will actually populate the LaunchServices DB.
+4. Verify the fix landed:
+   ```bash
+   mdfind 'kMDItemCFBundleIdentifier == "com.pager.agent"'
+   # expect: /Users/you/Applications/pager.app
+   ```
+5. Reopen Login Items panel.
+
+Logout + login is optional after v0.5.5 but may be needed if the Login Items panel doesn't live-refresh.
+
 ## [0.5.4] — 2026-05-19
 
 **The actual fix for the Login Items icon.** v0.5.3 added the `~/Applications/pager.app` symlink and `lsregister -f`, but the icon still didn't render — real-Mac test showed generic exec icon persisting. Research revealed the missing piece is `AssociatedBundleIdentifiers`, a key added in macOS Ventura 13 specifically for the legacy-plist case (i.e., when an app installs a LaunchAgent into `~/Library/LaunchAgents/` instead of using the modern SMAppService API).
@@ -359,7 +386,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.5
 [0.5.4]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.4
 [0.5.3]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.3
 [0.5.2]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.2
