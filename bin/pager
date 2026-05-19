@@ -52,6 +52,13 @@ _pager_stop_file() { printf '%s' "$__PAGER_ROOT/logs/.stopped"; }
 # ─── start: launch a session ────────────────────────────────────────────────
 cmd_start() {
   require tmux
+  # Hard check: claude must exist. Without it, the spawned tmux pane runs
+  # `claude --remote-control ...` which immediately fails, the wrapper bash
+  # kicks in, and you get a useless session that looks alive but isn't.
+  # Better to fail fast with the same install hint bootstrap uses.
+  if ! command -v claude >/dev/null 2>&1; then
+    err "claude (Claude Code CLI) not found on PATH.\n      Install: https://claude.com/code   (or: npm install -g @anthropic-ai/claude-code)\n      Then re-run: pager start"
+  fi
   local session="${1:-claude}"
   shift || true
   [ "${1-}" = "--" ] && shift || true
@@ -552,12 +559,22 @@ cmd_watchdog() {
   fi
 
   if [ -z "$claude_pid" ]; then
-    action="restart"
-    if [ "$tmux_alive" = true ]; then
-      tmux kill-session -t "$session" 2>/dev/null || true
+    # Before attempting restart, verify claude is actually installed. Without
+    # this guard, the watchdog will fire every 70s, fail at cmd_start every
+    # time, fill watch.csv with restart-failed rows, and on macOS each attempt
+    # can trip TCC prompts. Log a single clear "claude-missing" instead and
+    # exit cleanly. Once the user installs claude, the next tick will see it
+    # and restart normally.
+    if ! command -v claude >/dev/null 2>&1; then
+      action="claude-missing"
+    else
+      action="restart"
+      if [ "$tmux_alive" = true ]; then
+        tmux kill-session -t "$session" 2>/dev/null || true
+      fi
+      # Re-launch via cmd_start; it handles tmux + logging + remote-control flag.
+      cmd_start "$session" >/dev/null 2>&1 || action="restart-failed"
     fi
-    # Re-launch via cmd_start; it handles tmux + logging + remote-control flag.
-    cmd_start "$session" >/dev/null 2>&1 || action="restart-failed"
   fi
 
   printf '%s,%s,%s,%s,%s,%s,%s\n' \

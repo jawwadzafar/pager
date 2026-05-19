@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-05-19
+
+Watchdog + `pager start` now refuse to thrash when claude isn't installed.
+
+### Fixed
+- **Watchdog no longer tries to restart claude every 70s when the claude binary isn't on PATH.** Previously: pgrep fast path fails → slow path calls `cmd_start` → claude binary missing → wrapper bash exits → next tick repeats. Result: `watch.csv` filled with `restart-failed` rows; on macOS, each attempt could trip TCC prompts. **Now:** if `command -v claude` fails inside the watchdog, we log a single `action=claude-missing` row and exit. No tmux session created, no restart loop, no TCC noise. As soon as the user installs claude, the next tick sees it and resumes normal restart behavior.
+- **`pager start` now fails fast with an install hint if claude isn't on PATH**, instead of spinning up a tmux session whose `claude --remote-control ...` immediately fails and leaves a useless wrapper-bash session looking "alive." Same install message bootstrap prints in its soft-check (link to Claude Code site + the `npm install -g @anthropic-ai/claude-code` one-liner).
+
+### Added
+- New smoke test: `watchdog logs claude-missing (no restart loop)`. Test 9b runs the watchdog with `PATH=/usr/bin:/bin` (no claude), confirms `watch.csv` ends with `action=claude-missing` rather than `restart-failed`. 24/24 tests now.
+
+### Notes
+- This is purely a defensive behavior change — when claude IS installed (the normal case), the watchdog behaves identically to v0.6.1.
+- If you see `claude-missing` rows in `~/.pager/logs/watch.csv`, the fix is: install Claude Code from https://claude.com/code, then `pager start`. Or `pager autostart disable` if you've decided you don't want pager running here at all.
+
 ## [0.6.1] — 2026-05-19
 
 Contribution surface + safety nets.
@@ -471,7 +486,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.2
 [0.6.1]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.1
 [0.6.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.0
 [0.5.7]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.7
