@@ -1,13 +1,200 @@
+# ─── Secrets (the precious bits) ───────────────────────────────────────────
 # Never commit anything sensitive from this folder.
 .env
+.env.local
+.env.*.local
 # Allow committing .env.example (template) — explicitly un-ignore it.
 !.env.example
+
+# Private keys
 *.key
 *.pem
+*.p12
+*.pfx
+*.crt        # most certs are public, but exclude by default; un-ignore yours if needed
 *_rsa
 *_rsa.pub
+*_dsa
+*_dsa.pub
+*_ecdsa
+*_ecdsa.pub
 *_ed25519
 *_ed25519.pub
+authorized_keys
+known_hosts
+
+# Local inventory + state — never share host lists
 inventory.local.yaml
+inventory.local.*
+hosts.yml
+hosts.local.*
+
+# Runtime state — generated, machine-local
 logs/
 state/
+*.log
+*.csv.bak
+.stopped
+
+# ─── Python build artifacts (assets/scripts/) ──────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/        # collides with /lib only if you create a Python lib dir at root — harmless otherwise
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Python virtualenvs
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Python testing / coverage / mypy
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+
+# ─── Node / npm / pnpm / yarn (defensive — if anyone adds JS later) ────────
+node_modules/
+package-lock.json.bak
+yarn.lock.bak
+.npm/
+.yarn/
+.pnpm-store/
+.pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─── macOS junk ────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# ─── Linux junk ────────────────────────────────────────────────────────────
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ─── Windows junk (defensive) ──────────────────────────────────────────────
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# ─── IDE / editor configs (committed configs allowed via !path/file) ───────
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json   # only if you ever want to commit project-wide settings
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+*.sublime-workspace
+*.sublime-project
+.history/
+.atom/
+
+# Vim
+*.swp
+*.swo
+*.swn
+*.swm
+Session.vim
+.netrwhist
+tags
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# JetBrains shelf
+.shelf/
+
+# ─── Build / output artifacts (defensive) ──────────────────────────────────
+*.o
+*.a
+*.lib
+*.dll
+*.dylib
+*.exe
+out/
+target/
+bin-output/
+
+# ─── tmux / shell session leftovers ────────────────────────────────────────
+.tmux-history
+.zcompdump
+.zsh_history
+.bash_history
+.lesshst
+
+# ─── docs build (Pages serves docs/ as-is — no build step right now) ───────
+docs/.cache/
+docs/_site/
+
+# ─── pager-specific: temporary work / forensic backups ─────────────────────
+*.pager.bak.*
+*.pre-install-*
+pager-fresh-install.log
+pager.pre-install-*/

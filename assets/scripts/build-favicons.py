@@ -105,34 +105,36 @@ def build_og_image() -> None:
     fg_dim = (154, 168, 160, 255)    # var(--fg-dim)
     accent = (15, 255, 138, 255)      # var(--green)
 
-    # Wordmark
+    # Wordmark — small, lowercase, top-left of the text column
     try:
-        wm_font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 100)
+        wm_font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf', 36)
     except Exception:
         wm_font = ImageFont.load_default()
-    d.text((text_x, 170), 'pager', font=wm_font, fill=fg)
+    d.text((text_x, 90), 'pager', font=wm_font, fill=accent)
 
-    # Tagline (two lines)
+    # Hero headline — the wow line
     try:
-        tl_font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 34)
+        hl_font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 64)
     except Exception:
-        tl_font = ImageFont.load_default()
-    d.text((text_x, 290), 'Remote Claude Code sessions,', font=tl_font, fill=fg_dim)
-    d.text((text_x, 332), 'from your phone.', font=tl_font, fill=fg_dim)
+        hl_font = ImageFont.load_default()
+    d.text((text_x, 150), 'Claude Code', font=hl_font, fill=fg)
+    d.text((text_x, 222), 'that never sleeps.', font=hl_font, fill=fg)
 
-    # OS line
+    # Subtitle — the proof points
     try:
-        os_font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf', 24)
+        st_font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 26)
+    except Exception:
+        st_font = ImageFont.load_default()
+    d.text((text_x, 320), 'No timeouts. No "session expired."', font=st_font, fill=fg_dim)
+    d.text((text_x, 354), 'Persistent claude --remote-control,', font=st_font, fill=fg_dim)
+    d.text((text_x, 388), 'driven from your phone.', font=st_font, fill=fg_dim)
+
+    # OS line — chip-style
+    try:
+        os_font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf', 22)
     except Exception:
         os_font = ImageFont.load_default()
-    d.text((text_x, 420), 'Linux  +  macOS', font=os_font, fill=accent)
-
-    # URL hint along the bottom
-    try:
-        url_font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf', 20)
-    except Exception:
-        url_font = ImageFont.load_default()
-    d.text((text_x, 480), 'jawwadzafar.github.io/pager', font=url_font, fill=fg_dim)
+    d.text((text_x, 462), 'Linux  +  macOS  •  one-line install  •  MIT', font=os_font, fill=accent)
 
     write_png(img, DOCS / 'og-image.png')
 

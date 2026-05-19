@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 
 <!-- ─── core ─── -->
-<title>pager — remote Claude Code sessions, from your phone (Linux + macOS)</title>
-<meta name="description" content="Turn any always-on machine — Linux mini-PC, Mac mini, MacBook — into a remote-controllable Claude Code rig. Background tmux + claude --remote-control, driven from your phone over claude.ai. One-line install. MIT."/>
-<meta name="keywords" content="Claude Code, Claude AI, remote control, tmux, Linux, macOS, mobile, phone, SSH alternative, headless, self-hosted"/>
+<title>pager — persistent Claude Code that never times out, drive it from your phone</title>
+<meta name="description" content="Claude Code in the browser times out, dies on laptop sleep, loses context. pager runs claude --remote-control inside a persistent tmux on your own always-on Linux or Mac — same session, no timeouts, survives reboots, drive it from any phone signed into claude.ai. One-line install, MIT."/>
+<meta name="keywords" content="Claude Code, persistent session, no timeout, always-on, remote control, tmux, Linux, macOS, Mac mini, mobile, phone, SSH alternative, headless, self-hosted"/>
 <meta name="author" content="Jawwad Zafar"/>
 <meta name="theme-color" content="#0fff8a"/>
 <meta name="application-name" content="pager"/>
@@ -24,21 +24,21 @@
 <!-- ─── Open Graph (Facebook, LinkedIn, Slack unfurl, etc) ─── -->
 <meta property="og:type" content="website"/>
 <meta property="og:url" content="https://jawwadzafar.github.io/pager/"/>
-<meta property="og:title" content="pager — remote Claude Code sessions, from your phone"/>
-<meta property="og:description" content="One-line install. Linux + macOS. Background tmux + claude --remote-control. Drive your dev box from any phone signed into claude.ai. MIT."/>
+<meta property="og:title" content="Claude Code that never sleeps."/>
+<meta property="og:description" content="Persistent claude --remote-control inside a tmux session on your own always-on Linux or Mac. No timeouts. No 'session expired.' No 'reconnect.' Drive it from any phone signed into claude.ai. One-line install. MIT."/>
 <meta property="og:image" content="https://jawwadzafar.github.io/pager/og-image.png"/>
 <meta property="og:image:width" content="1200"/>
 <meta property="og:image:height" content="630"/>
-<meta property="og:image:alt" content="pager — remote Claude Code sessions from your phone, on Linux and macOS"/>
+<meta property="og:image:alt" content="pager — Claude Code that never sleeps. Persistent remote sessions on Linux + macOS."/>
 <meta property="og:site_name" content="pager"/>
 <meta property="og:locale" content="en_US"/>
 
 <!-- ─── Twitter / X card ─── -->
 <meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:title" content="pager — remote Claude Code sessions, from your phone"/>
-<meta name="twitter:description" content="One-line install. Linux + macOS. Background tmux + claude --remote-control. Drive your dev box from any phone signed into claude.ai. MIT."/>
+<meta name="twitter:title" content="Claude Code that never sleeps."/>
+<meta name="twitter:description" content="Persistent claude --remote-control inside a tmux session on your own always-on Linux or Mac. No timeouts. Drive it from any phone signed into claude.ai."/>
 <meta name="twitter:image" content="https://jawwadzafar.github.io/pager/og-image.png"/>
-<meta name="twitter:image:alt" content="pager — remote Claude Code sessions from your phone, on Linux and macOS"/>
+<meta name="twitter:image:alt" content="pager — Claude Code that never sleeps. Persistent remote sessions on Linux + macOS."/>
 
 <!-- ─── structured data: SoftwareApplication ─── -->
 <script type="application/ld+json">
@@ -81,11 +81,17 @@
 <section class="hero">
   <div class="crt-vignette" aria-hidden="true"></div>
   <img src="logo.svg" alt="pager logo" class="logo" width="280" height="105"/>
-  <h1 class="phosphor">Remote Claude Code sessions, from your phone.</h1>
+  <h1 class="phosphor">Claude Code that never sleeps.</h1>
   <p class="tagline">
-    Turn any always-on machine — Linux mini-PC, Mac mini, your daily MacBook —
-    into a Claude Code rig you carry in your pocket.
-    Background tmux + Claude Code's built-in <code>--remote-control</code>.
+    Claude Code in the browser is great — until your laptop sleeps,
+    your network blinks, or the session times out and your context is gone.
+    <strong>pager runs <code>claude --remote-control</code> inside a persistent tmux</strong>
+    on your own always-on Linux box or Mac. No timeouts. No "session expired."
+    No "please reconnect." Same session is alive when you wake up tomorrow,
+    when you switch from laptop to phone, when the rig reboots.
+    <br/><br/>
+    Open the URL on any phone signed into your claude.ai account →
+    you're inside the same shell, the same context, the same conversation.
     No SSH tunnel. No port forward. No relay you don't already trust.
   </p>
 

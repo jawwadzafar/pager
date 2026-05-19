@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-05-19
+
+Content + polish pass on top of 0.5.0 — sharper positioning, defensive .gitignore.
+
+### Changed
+- **Headline + positioning rewritten** around the actual differentiator: persistence. "Claude Code that never sleeps." vs the old "Remote Claude Code sessions, from your phone." The hero, the meta description, the OG title + description, and the README intro all now lead with "no timeouts / no session expired / survives reboots" — the value Claude Code in the browser can't give you. Updated across:
+  - `docs/index.html` `<title>`, `meta name="description"`, og:title, og:description, twitter:title, twitter:description.
+  - `docs/index.html` hero `<h1>` + tagline. New copy contrasts pager against the browser failure mode explicitly.
+  - `README.md` intro: top section is now a `## Claude Code that never sleeps.` heading + the same value prop.
+  - Regenerated `docs/og-image.png` (1200×630): new layout with the "Claude Code that never sleeps." headline as primary text, proof-point subtitle, accent chip line at the bottom (Linux + macOS • one-line install • MIT). Icon column left, text column right.
+  - `assets/scripts/build-favicons.py` updated so re-running the script regenerates the new card.
+
+### Added
+- **Comprehensive `.gitignore`** covering secrets (.env / .env.local / .env.*.local / keys / certs / known_hosts), Python build artifacts (`__pycache__`, `*.pyc`, eggs, build/dist, venvs, pytest/mypy/ruff caches), Node defensive entries (`node_modules`, npm/pnpm/yarn lockfile backups + debug logs), OS junk (.DS_Store + the full macOS noise set, Thumbs.db + Windows Recycle Bin, Linux `.fuse_hidden` / `.nfs*`), IDE configs (.vscode, .idea, JetBrains shelf, Sublime workspaces, Atom history), Vim/Emacs swap files + backup files, build outputs (*.o, *.a, *.exe, dist/, target/, out/), tmux/shell history leftovers, docs build outputs (defensive — Pages publishes docs/ as-is right now), and pager-specific forensic backups (`*.pager.bak.*`, `*.pre-install-*`, `pager-fresh-install.log`).
+- Removed the previously-committed `assets/scripts/__pycache__/build_icns.cpython-314.pyc` (slipped in with 0.5.0 — now gone and gitignored).
+
 ## [0.5.0] — 2026-05-19
 
 The "looks like a real app on the Login Items list" release. Real `.app` bundle, generated icon, watchdog refactor that finally silences the macOS TCC popup on healthy ticks, and a full SEO + favicon pass on the website.
@@ -292,7 +308,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.1
 [0.5.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.0
 [0.4.1]: https://github.com/jawwadzafar/pager/releases/tag/v0.4.1
 [0.4.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.4.0

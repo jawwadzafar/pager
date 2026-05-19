@@ -34,9 +34,13 @@
  remote sessions for Claude Code · MIT
 ```
 
-**pager** turns any always-on machine — a Linux mini-PC under your desk, an old Mac mini in the closet, your daily-driver MacBook, a homelab box — into a remote-controllable Claude Code rig. Background tmux + Claude Code's built-in `--remote-control`, so any phone signed into your claude.ai account drives the same shell, with the same context, with no SSH tunnel, no port forward, no third-party relay.
+## Claude Code that never sleeps.
 
-Bundles a small inventory-driven SSH helper for operating on your fleet (workstations, home servers, VPSes) from inside the always-on session — credentials read from `.env`, never echoed.
+Claude Code in the browser is great — until your laptop sleeps, your network blinks, or the session quietly times out and your context is gone. **pager runs `claude --remote-control` inside a persistent tmux** on your own always-on Linux box or Mac. **No timeouts. No "session expired." No "please reconnect."** Same session is alive when you wake up tomorrow, when you switch from laptop to phone, when the rig reboots and comes back without you.
+
+Open the URL on **any phone** signed into your claude.ai account and you're inside the same shell, the same context, the same conversation. No SSH tunnel. No port forward. No third-party relay you don't already trust — the only thing in the loop is claude.ai itself.
+
+Works on anything always-on: a Linux mini-PC under the desk, an old Mac mini in the closet, your daily MacBook, a homelab box. Bundles a small inventory-driven SSH helper for operating on your fleet (workstations, home servers, VPSes) from inside the always-on session — credentials read from `.env`, never echoed.
 
 > **Why this exists.** Hermes-style command center, but for Claude Code: a persistent terminal you carry in your pocket.
 
