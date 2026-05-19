@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0-alpha-3] — 2026-05-19
+
+Third alpha: actually run claude in the background on Windows-native, with no
+WSL and no visible terminal window. Experimental.
+
+### Changed
+- **`pager start` no longer redirects stdout/stderr.** That's the cause of the
+  TTY-bailout from -alpha-2 (claude saw piped streams, switched to `--print`
+  mode, exited). Now `Start-Process -WindowStyle Hidden` (no redirect) gives
+  claude a hidden console window with a real TTY -- it runs interactively in
+  the background with no UI.
+- **`pager url` is now a console-buffer scraper.** Spawns a sidecar
+  PowerShell that uses Win32 `FreeConsole` + `AttachConsole(claudePid)` +
+  `ReadConsoleOutputCharacter` to read claude's hidden console screen buffer,
+  regexes for `claude.ai/code/session_...`, and caches the result to
+  `logs\<session>.url` so later calls don't have to re-scrape.
+- **`pager logs` no longer tails anything** -- no log capture happens on
+  Windows in this alpha. Prints an explanation pointing at WSL2 for full log
+  tailing.
+
+### Caveats (intentional)
+- The URL must be on claude's current screen when `pager url` runs the first
+  time. claude prints it within ~5s of startup, so running `pager url` right
+  after `pager start` works. Once cached, subsequent calls read the cache.
+- No watchdog yet -- crash recovery relies on the Scheduled Task's built-in
+  RestartInterval/RestartCount. Real user-timer watchdog is v0.8 work.
+
+### Why "experimental"
+`AttachConsole`/`ReadConsoleOutputCharacter` on a hidden console of a process
+started via `Start-Process -WindowStyle Hidden` is documented to work but
+gets less testing than the foreground case. If `pager url` returns
+"URL not visible in claude's console buffer yet" repeatedly, please file an
+issue with `pager status` + Windows version output.
+
 ## [0.7.0-alpha-2] — 2026-05-19
 
 Second hotfix on the Windows alpha. Headline finding: **claude requires a TTY

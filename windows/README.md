@@ -120,41 +120,55 @@ pager trust --reset $env:USERPROFILE
 
 ---
 
-## Known limitations
+## How Windows-native session capture works (and what it can't do)
 
-### `pager start` claude immediately exits with "Input must be provided ... --print"
+On Linux/macOS, pager runs claude inside **tmux**, which provides a PTY (real
+terminal) and lets pager capture every byte of output to a log file. Claude
+runs interactively and the URL ends up greppable in `logs/claude.log`.
 
-**This is the v0.7.0-alpha headline limitation.** Claude Code checks whether
-it's attached to a real terminal (TTY) when it launches. On Linux/macOS, pager
-runs claude inside **tmux**, which provides a PTY, so claude runs interactively
-and you get a `claude.ai/code/session_...` URL.
+On Windows there's no tmux equivalent shipped, and `Start-Process` forces a
+hard choice:
+- **Redirect stdout/stderr to files** → no TTY → claude bails to `--print`
+  mode → exits with `Input must be provided...`. This is what v0.7.0-alpha
+  and -alpha-1 did, and why claude died immediately.
+- **Don't redirect** → claude gets a hidden console window with a real TTY,
+  runs interactively in the background. But no log capture.
 
-On Windows, pager spawns claude via `Start-Process` with stdout/stderr
-redirected to log files. That gives claude **no TTY**, so claude switches to
-`--print` mode (the file/pipe mode), looks for piped input, finds nothing, and
-bails with:
+**v0.7.0-alpha-3 chooses option 2** plus a screen-buffer scraper:
 
+| What | How |
+|---|---|
+| `pager start` | `Start-Process claude -WindowStyle Hidden` (no redirect). claude runs in a hidden console window. No taskbar entry, no visible UI. |
+| `pager url` | Spawns a sidecar PowerShell that calls Win32 `FreeConsole` + `AttachConsole(claudePid)` + `ReadConsoleOutputCharacter` to scrape claude's hidden console screen buffer, regexes for the `claude.ai/code/session_...` URL, caches it to `logs\<session>.url`. |
+| `pager status` / `pager stop` | Track by PID (unchanged). |
+| `pager logs` | **Doesn't work.** Prints an explanation pointing here. |
+
+### Known caveats
+
+- **`pager logs` shows nothing.** No log file gets written. Use `pager url`
+  for the URL and `pager status` for liveness. For full log tailing, use
+  WSL2 + the Linux installer (tmux-backed).
+- **The URL must be on claude's current screen when you first run `pager url`.**
+  claude prints the Remote Control URL within ~5 seconds of startup. If you
+  wait long enough that the URL scrolls off (lots of activity), the scraper
+  can't see it anymore. Once `pager url` succeeds once, the URL is cached in
+  `logs\<session>.url` and subsequent calls read from there.
+- **No watchdog yet.** If claude crashes, the Scheduled Task's restart
+  settings (RestartInterval=2min, RestartCount=3) is the only recovery
+  mechanism. A proper user-timer watchdog is v0.8 work.
+
+### When to use WSL2 instead
+
+If you need any of: live log tailing, the inventory-driven SSH helper
+(`pager ssh`), the watchdog, or the most-battle-tested code path — install
+WSL2 and use the Linux installer there. Same pager, same commands, but
+running on tmux + bash:
+
+```powershell
+wsl --install -d Ubuntu       # one-time, requires reboot
+wsl                            # drop into Ubuntu
+curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh
 ```
-Input must be provided either through stdin or as a prompt argument when using --print
-```
-
-**Fixing this properly requires a Windows ConPTY shim** (the Win10 1809+
-pseudoconsole API), which is planned for v0.8 and is the main reason this
-release is alpha-marked. It's not a small change.
-
-**Working paths today**, in order of how well each one is supported:
-
-1. **WSL2 + the Linux installer**. Full PTY via tmux. Everything works exactly
-   as it does on Linux. Recommended if you need a working pager today.
-   ```powershell
-   wsl --install -d Ubuntu       # one-time, requires reboot
-   wsl                            # drop into Ubuntu
-   curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh
-   ```
-2. **Run claude directly in a visible terminal** and let the Scheduled Task
-   recover it on crashes. You lose `pager start` automation but `pager
-   status` / `pager url` / `pager logs` still work against the running PID.
-3. **Wait for v0.8**. Watch the GitHub issue tracker for "Windows ConPTY".
 
 ---
 
