@@ -40,6 +40,13 @@ Bundles a small inventory-driven SSH helper for operating on your fleet (worksta
 
 > **Why this exists.** Hermes-style command center, but for Claude Code: a persistent terminal you carry in your pocket.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/flow-dark.svg">
+    <img src="assets/flow.svg" alt="pager flow — CRT monitor → signal waves → phone, in the same chunky-bezel green-screen aesthetic as the pager logo" width="640"/>
+  </picture>
+</p>
+
 ---
 
 ## 📱 The 60-second phone walkthrough
@@ -47,7 +54,7 @@ Bundles a small inventory-driven SSH helper for operating on your fleet (worksta
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌────────────────────┐
 │  Your machine   │     │  claude.ai      │     │  Your phone        │
-│  (this repo)    │ ◄── │  relay          │ ◄── │  claude.ai/code    │
+│  Linux or Mac   │ ◄── │  relay          │ ◄── │  claude.ai/code    │
 │                 │     │                 │     │                    │
 │  tmux: claude   │     │  session_…      │     │  attached!         │
 │  --remote-      │     │                 │     │                    │
@@ -55,12 +62,11 @@ Bundles a small inventory-driven SSH helper for operating on your fleet (worksta
 └─────────────────┘     └─────────────────┘     └────────────────────┘
 ```
 
-1. **Install on the box (once):**
+1. **Install on your machine (once):**
    ```bash
-   git clone https://github.com/jawwadzafar/pager.git ~/pager
-   ~/pager/bootstrap.sh
+   curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh
    ```
-   That installs deps, wires the shell, enables linger, and starts the `pager.service`. A tmux session named `claude` is already running `claude --remote-control claude --dangerously-skip-permissions`.
+   Installs deps via `apt` (Linux) or `brew` (macOS), wires the shell, registers the service / LaunchAgent. A tmux session named `claude` is already running `claude --remote-control claude --dangerously-skip-permissions`.
 
 2. **Get the URL:**
    ```bash

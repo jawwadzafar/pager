@@ -113,14 +113,19 @@ Pager itself never asks for Full Disk Access, Accessibility, Screen Recording, o
 
 `bin/pager` detects `uname -s` at runtime and branches between systemd (Linux) and launchd (macOS) for service-state queries. Two portable helpers (`file_mode`, `date_to_epoch`) replace `stat -c` / `date -d` calls that would have failed under BSD coreutils.
 
-## Autostart semantics — login vs boot
+## Autostart — recommended setup
 
-Linux pager uses `loginctl enable-linger` so user services run at **boot** before any login. macOS LaunchAgents only run **after the user logs in**.
+For the "always-on rig" use case (Mac mini under the desk, etc.), the cleanest macOS setup is:
 
-If your Mac is rebooting while no one is logged in, pager won't come up until login. For most personal Macs this is fine. If you need closer-to-linger behavior:
+1. **Enable macOS auto-login.** System Settings → Users & Groups → Login Options → Automatic login → choose your account. The Mac boots straight to your desktop, the LaunchAgent fires, pager comes up. No password prompt, no manual start, no SSH-in-to-resume.
+2. **Disable FileVault** on the rig if it's not a portable machine you carry around. FileVault is incompatible with auto-login (the disk has to be unlocked manually before any user account is available, by definition). For a desktop Mac mini behind your own physical security, FileVault adds operational friction for very little real threat-model coverage.
+3. **Run `pager doctor`** after first login to confirm `com.pager.agent: loaded` and a Remote Control URL is visible.
 
-1. **Enable auto-login**: System Settings → Users & Groups → Login Options → Automatic login → choose your account. This is incompatible with FileVault (FileVault requires manual unlock before any user account is available).
-2. **LaunchDaemon alternative**: out of scope for phase 1. A LaunchDaemon would run at true boot time as root and `sudo -u` into the user, but that requires changes to `bin/pager` and broader security review. Phase 3.
+That combo is the equivalent of Linux's `loginctl enable-linger` for our purposes: the box reboots, pager comes back, your phone URL is live again within ~30 seconds.
+
+If you'd rather keep FileVault on and live with "pager starts on login," that also works — just expect manual unlock after each reboot.
+
+A LaunchDaemon (real boot-time start as root, then drop privileges into your user) is intentionally out of scope. It would require `bin/pager` to be daemon-aware and broader security review for marginal gain over the auto-login + LaunchAgent combo above.
 
 ## Common operations
 

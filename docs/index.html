@@ -3,13 +3,62 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>pager — remote Claude Code sessions for any Linux box or Mac</title>
-<meta name="description" content="Turn any always-on machine — Linux mini-PC, Mac mini, your daily MacBook — into a remote-controllable Claude Code rig. Background tmux + Claude Code's --remote-control, driven from your phone. One-command install. MIT."/>
-<meta property="og:title" content="pager — remote Claude Code sessions for any Linux box or Mac"/>
-<meta property="og:description" content="Persistent tmux + Claude Code remote-control on Linux or macOS, driven from your phone. One-command install. MIT."/>
+
+<!-- ─── core ─── -->
+<title>pager — remote Claude Code sessions, from your phone (Linux + macOS)</title>
+<meta name="description" content="Turn any always-on machine — Linux mini-PC, Mac mini, MacBook — into a remote-controllable Claude Code rig. Background tmux + claude --remote-control, driven from your phone over claude.ai. One-line install. MIT."/>
+<meta name="keywords" content="Claude Code, Claude AI, remote control, tmux, Linux, macOS, mobile, phone, SSH alternative, headless, self-hosted"/>
+<meta name="author" content="Jawwad Zafar"/>
+<meta name="theme-color" content="#0fff8a"/>
+<meta name="application-name" content="pager"/>
+<link rel="canonical" href="https://jawwadzafar.github.io/pager/"/>
+
+<!-- ─── icons ─── -->
+<link rel="icon" type="image/svg+xml" href="icon.svg"/>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png"/>
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png"/>
+<link rel="alternate icon" href="favicon.ico"/>
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png"/>
+<link rel="mask-icon" href="icon.svg" color="#0fff8a"/>
+
+<!-- ─── Open Graph (Facebook, LinkedIn, Slack unfurl, etc) ─── -->
 <meta property="og:type" content="website"/>
 <meta property="og:url" content="https://jawwadzafar.github.io/pager/"/>
-<link rel="icon" href="logo.svg" type="image/svg+xml"/>
+<meta property="og:title" content="pager — remote Claude Code sessions, from your phone"/>
+<meta property="og:description" content="One-line install. Linux + macOS. Background tmux + claude --remote-control. Drive your dev box from any phone signed into claude.ai. MIT."/>
+<meta property="og:image" content="https://jawwadzafar.github.io/pager/og-image.png"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta property="og:image:alt" content="pager — remote Claude Code sessions from your phone, on Linux and macOS"/>
+<meta property="og:site_name" content="pager"/>
+<meta property="og:locale" content="en_US"/>
+
+<!-- ─── Twitter / X card ─── -->
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="pager — remote Claude Code sessions, from your phone"/>
+<meta name="twitter:description" content="One-line install. Linux + macOS. Background tmux + claude --remote-control. Drive your dev box from any phone signed into claude.ai. MIT."/>
+<meta name="twitter:image" content="https://jawwadzafar.github.io/pager/og-image.png"/>
+<meta name="twitter:image:alt" content="pager — remote Claude Code sessions from your phone, on Linux and macOS"/>
+
+<!-- ─── structured data: SoftwareApplication ─── -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "pager",
+  "description": "Turn any always-on Linux or macOS machine into a remote-controllable Claude Code rig. Background tmux + claude --remote-control, driven from your phone.",
+  "url": "https://jawwadzafar.github.io/pager/",
+  "image": "https://jawwadzafar.github.io/pager/og-image.png",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Linux, macOS",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "license": "https://opensource.org/licenses/MIT",
+  "author": { "@type": "Person", "name": "Jawwad Zafar" },
+  "codeRepository": "https://github.com/jawwadzafar/pager",
+  "programmingLanguage": "Shell"
+}
+</script>
+
 <link rel="stylesheet" href="style.css"/>
 </head>
 <body>

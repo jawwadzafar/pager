@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-05-19
+
+The "looks like a real app on the Login Items list" release. Real `.app` bundle, generated icon, watchdog refactor that finally silences the macOS TCC popup on healthy ticks, and a full SEO + favicon pass on the website.
+
+### Added
+
+**`pager.app` bundle + generated AppIcon.icns**
+- `macos/pager.app/` is a real macOS app bundle: `Contents/Info.plist` (`CFBundleName=pager`, `CFBundleIdentifier=com.pager.agent`, `LSBackgroundOnly=true`, `LSUIElement=true`, `LSMinimumSystemVersion=15.0`), `Contents/MacOS/pager` (POSIX `sh` launcher that `exec`s `$PAGER_ROOT/bin/pager`), `Contents/Resources/AppIcon.icns` (multi-resolution: 16@2x, 32@2x, 128, 128@2x, 256, 256@2x, 512, 512@2x = 8 PNG-backed entries, ~47 KB total).
+- `macos/launchd/com.pager.agent.plist.template` now points its `ProgramArguments` at the .app's launcher (`__PAGER_ROOT__/macos/pager.app/Contents/MacOS/pager`) instead of `bin/pager` directly. That's the trick that makes the **Login Items row show a real "pager" name + icon** instead of "Item from unidentified developer" + generic exec icon.
+- `macos/bootstrap.sh` step 10c now `lsregister -f`s the bundle so LaunchServices picks up the icon + display name immediately (otherwise auto-discovery for bundles outside `/Applications` is unreliable on first install).
+- `assets/scripts/build_icns.py` — Pillow + stdlib `struct` icon generator. Re-run to rebuild the icon: `python3 assets/scripts/build_icns.py`. No external image tools required (no `iconutil`, no `rsvg-convert`).
+
+**Favicons + Open Graph card for the docs site**
+- `assets/scripts/build-favicons.py` re-uses the same icon renderer to emit, into `docs/`:
+  - `favicon.ico` (16/32/48 multi-resolution Windows-style)
+  - `favicon-16.png`, `favicon-32.png` (modern browsers prefer explicit PNG)
+  - `apple-touch-icon.png` (180×180, iOS Home Screen + macOS Safari tab)
+  - `icon.svg` (vector, modern browser SVG-favicon path)
+  - `og-image.png` (1200×630 social-share card: pager icon left, wordmark + tagline + "Linux + macOS" right)
+- `docs/index.html` `<head>` now wires up: `icon`, `alternate icon`, `apple-touch-icon`, `mask-icon`, `theme-color`, `application-name`.
+
+**SEO pass on `docs/index.html`**
+- Title and meta `description` rewritten to put "Claude Code", "Linux", "macOS", "phone", "tmux", "claude --remote-control" in the first 160 chars.
+- Added `meta name="keywords"`, `author`, `canonical link`.
+- Full **Open Graph** set: `og:type`, `og:url`, `og:title`, `og:description`, `og:image` (+ width / height / alt), `og:site_name`, `og:locale`.
+- Full **Twitter / X card** set: `twitter:card=summary_large_image`, title, description, image, image:alt.
+- **JSON-LD structured data**: `SoftwareApplication` schema.org block with operatingSystem, license, codeRepository, image, offers (price=0).
+
+**SVGs in the README too**
+- `README.md` now embeds the `assets/flow.svg` + `assets/flow-dark.svg` pair (via `<picture>`) directly below the "Why this exists" line — matches the visual storytelling of the docs site without having to leave GitHub.
+- New `assets/icon.svg` (square vector version of the app icon) is also committed for parity.
+
+### Changed
+
+**Watchdog: pgrep-based liveness fast path**
+- `cmd_watchdog` gets a second early-bypass right after the `.stopped` semaphore check. If `pgrep -f "claude .*--remote-control <session>"` finds a running process, the watchdog logs a `noop` row with the live PID + `rc_banner=true` and exits WITHOUT making any tmux call. On macOS this means the App Management TCC prompt ("tmux would like to access data from other apps") **fires at most once per restart, not every 70 seconds**. The slow path (full tmux diagnostic + restart-if-dead) still runs when pgrep finds nothing, so the test "watchdog restarts a dead session" still passes (it uses `PAGER_NO_REMOTE=1`, which intentionally skips the pgrep fast path).
+
+**Dropped `brew install python@3.13`** *(rolled in from 0.4.1 — restating because users skipping straight to 0.5.0 should know)* — `macos/bootstrap.sh` step 2 is just `brew install tmux libyaml` now. Apple's `/usr/bin/python3` is used for the inline json/yaml/datetime work.
+
+**Autostart docs rewritten** in `macos/README.md`. The "Autostart semantics — login vs boot" section now leads with the *recommendation*: enable macOS auto-login + disable FileVault on a dedicated rig. The LaunchDaemon footnote is shorter and clearly marked "out of scope." Matches the `CLAUDE.md` guidance that "LaunchAgent + auto-login is the pragmatic match."
+
+### Notes
+- Migrating from 0.4.x → 0.5.0: `cd ~/.pager && git pull && ./macos/bootstrap.sh`. Bootstrap will `lsregister` the new bundle and re-bootstrap the LaunchAgent pointing at the .app's launcher. After re-login (or `launchctl kickstart gui/$(id -u)/com.pager.agent`), the Login Items row should show a real `pager` icon + name.
+- If the Login Items row still shows the old generic icon after upgrade, run `sfltool resetbtm` to clear the macOS Background Tasks Management cache, then re-bootstrap. (`pager uninstall` also walks you to that hint on macOS.)
+
 ## [0.4.1] — 2026-05-19
 
 Quick follow-up to 0.4.0 — sharper install URL, POSIX-portable installer, drop the dead-weight brew python install.
@@ -247,7 +292,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.0
 [0.4.1]: https://github.com/jawwadzafar/pager/releases/tag/v0.4.1
 [0.4.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.4.0
 [0.3.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.3.0

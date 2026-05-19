@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+  <defs>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0fff8a"/>
+      <stop offset="100%" stop-color="#00a05a"/>
+    </linearGradient>
+  </defs>
+  <!-- body -->
+  <rect x="0" y="0" width="100" height="100" rx="22" fill="#111" stroke="#2c2c2c" stroke-width="0.8"/>
+  <!-- CRT screen -->
+  <rect x="16" y="18" width="68" height="44" rx="4" fill="url(#screen)"/>
+  <!-- wordmark -->
+  <text x="50" y="46" font-size="11" font-weight="800" fill="#001a0c" text-anchor="middle" letter-spacing="0.5">PAGER</text>
+  <!-- buttons -->
+  <g fill="#444">
+    <circle cx="28" cy="78" r="2.5"/>
+    <circle cx="41" cy="78" r="2.5"/>
+    <circle cx="54" cy="78" r="2.5"/>
+    <circle cx="67" cy="78" r="2.5"/>
+  </g>
+  <circle cx="80" cy="78" r="2.5" fill="#e54"/>
+</svg>

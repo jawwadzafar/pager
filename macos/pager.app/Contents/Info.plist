@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>pager</string>
+    <key>CFBundleDisplayName</key>
+    <string>pager</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.pager.agent</string>
+    <key>CFBundleVersion</key>
+    <string>0.5.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.5.0</string>
+    <key>CFBundleExecutable</key>
+    <string>pager</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+
+    <!--
+      Background-only: no Dock icon, no menubar, never activates a window.
+      The agent runs entirely from launchd; this bundle is just the on-disk
+      shape macOS needs to attach an icon + a human-readable name to the
+      Login Items row.
+    -->
+    <key>LSBackgroundOnly</key>
+    <true/>
+    <key>LSUIElement</key>
+    <true/>
+
+    <key>NSHumanReadableCopyright</key>
+    <string>MIT — github.com/jawwadzafar/pager</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>15.0</string>
+</dict>
+</plist>

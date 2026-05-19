@@ -14,9 +14,16 @@
       ongoing health checks (StartInterval every 70 s).
     -->
 
+    <!--
+      ProgramArguments points at the .app's launcher, not bin/pager
+      directly. The launcher is a thin shell shim that exec's bin/pager.
+      Going through the .app bundle is what gives the Login Items row
+      a real "pager" name + icon (Info.plist + AppIcon.icns) instead of
+      "Item from unidentified developer" + generic exec icon.
+    -->
     <key>ProgramArguments</key>
     <array>
-        <string>__PAGER_ROOT__/bin/pager</string>
+        <string>__PAGER_ROOT__/macos/pager.app/Contents/MacOS/pager</string>
         <string>watchdog</string>
         <string>claude</string>
     </array>

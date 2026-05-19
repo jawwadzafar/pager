@@ -440,6 +440,7 @@ cmd_watchdog() {
   local ts
   ts="$(date -Iseconds)"
 
+  # ── early-bypass 1: stop semaphore ──
   # If the user ran `pager stop`, the semaphore is set. Log a noop row and
   # exit BEFORE making any tmux calls — this prevents the macOS TCC prompt
   # from firing every 70s while pager is intentionally stopped.
@@ -449,6 +450,34 @@ cmd_watchdog() {
     return 0
   fi
 
+  # ── early-bypass 2: healthy claude (pgrep) ──
+  # If pgrep finds a running `claude --remote-control <session>` process,
+  # the session is healthy. Log noop and exit WITHOUT touching tmux.
+  #
+  # Motivation: every tmux call from this watchdog (which runs under one
+  # launchd context) into the tmux server (spawned under another launchd
+  # context) trips macOS's App Management TCC check — "tmux would like
+  # to access data from other apps." Skipping tmux on healthy ticks means
+  # the TCC prompt only fires AT MOST once per restart, not every 70 s.
+  #
+  # We also skip this fast path if PAGER_NO_REMOTE is set (sessions then
+  # have no --remote-control arg, the pattern wouldn't match, and the
+  # tmux-based diagnostic path is still right anyway).
+  local pgrep_pid=""
+  if [ -z "${PAGER_NO_REMOTE:-}" ]; then
+    pgrep_pid="$(pgrep -f "claude .*--remote-control[[:space:]]+$session" 2>/dev/null | head -1 || true)"
+  fi
+  if [ -n "$pgrep_pid" ]; then
+    local age_sec_fast=""
+    age_sec_fast="$(ps -o etimes= -p "$pgrep_pid" 2>/dev/null | tr -d ' ' || true)"
+    printf '%s,%s,%s,%s,%s,%s,%s\n' \
+      "$ts" "$session" "true" "$pgrep_pid" "true" "${age_sec_fast:-}" "noop" >> "$csv"
+    return 0
+  fi
+
+  # ── slow path: pgrep found nothing, run the full tmux-based diagnostic ──
+  # We get here when claude isn't running (needs a restart), or when running
+  # in PAGER_NO_REMOTE mode where pgrep's pattern can't match.
   require tmux
 
   local tmux_alive=false pane_pid="" claude_pid="" rc_banner=false age_sec="" action="noop"

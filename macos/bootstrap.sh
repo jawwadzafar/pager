@@ -258,7 +258,17 @@ render_plist \
   "$HOME/Library/LaunchAgents/com.pager.agent.plist"
 ok "Rendered com.pager.agent.plist"
 
-# 10c. Reload (bootout if loaded, then bootstrap). Modern launchctl 2 syntax.
+# 10c. Register the pager.app bundle with LaunchServices so the Login
+# Items row picks up its Info.plist name + AppIcon.icns. The bundle
+# lives in $PAGER_ROOT/macos/pager.app, outside /Applications, so
+# auto-discovery isn't guaranteed — lsregister -f forces it.
+lsregister="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
+if [ -x "$lsregister" ] && [ -d "$__PAGER_ROOT/macos/pager.app" ]; then
+  "$lsregister" -f "$__PAGER_ROOT/macos/pager.app" 2>/dev/null || true
+  ok "Registered pager.app with LaunchServices"
+fi
+
+# 10d. Reload (bootout if loaded, then bootstrap). Modern launchctl 2 syntax.
 launchctl bootout "gui/$USER_UID/com.pager.agent" 2>/dev/null || true
 launchctl bootstrap "gui/$USER_UID" "$HOME/Library/LaunchAgents/com.pager.agent.plist"
 ok "com.pager.agent loaded"
