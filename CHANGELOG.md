@@ -5,7 +5,9 @@ All notable changes to **pager** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — dev branch
+## [Unreleased]
+
+## [0.6.0] — 2026-05-19
 
 **`pager autostart` subcommand + cleaner separation of "register the unit" vs "run the install."** Autostart stays on by default (that's the whole pitch — "Claude Code that never sleeps"), but you can now toggle it without re-bootstrapping, opt out at install time, and the docs are honest about the macOS TCC prompt cost.
 
@@ -450,7 +452,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.5.7...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.0
 [0.5.7]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.7
 [0.5.6]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.6
 [0.5.5]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.5
