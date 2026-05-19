@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.8] — 2026-05-19
+
+`pager start` now auto-trusts whatever directory it launches claude in, and accepts `--cwd` to start in a project dir other than `$HOME`. Plus the install heads-up explains what `~/.pager/.env` is for.
+
+### Added
+- **`pager start [--cwd DIR]`** — new flag. tmux launches claude in `DIR` instead of `$HOME`, and pager auto-trusts `DIR` first so claude doesn't show its "Trust this folder?" prompt. Example: `pager start work --cwd ~/code/myproject`.
+- **`cmd_start` auto-trusts the launch directory** before spawning tmux, regardless of whether `--cwd` was passed. Belt-and-suspenders: even if bootstrap's pre-trust got clobbered somehow (claude rewriting `~/.claude.json`, manual edit, etc.), every `pager start` re-asserts trust on the dir it's about to use.
+- **`install.sh` heads-up explains `~/.pager/.env`** — names it as optional, points at `.env.example` for variables, and lists the three ways to pre-trust extra dirs (`pager trust ...`, `PAGER_TRUST_PATHS`, `pager start --cwd ...`).
+- New smoke test 9c2: `pager start --cwd /this/does/not/exist` must fail cleanly (no half-spawned session). 27/27 tests pass.
+
+### Why
+User asked for "a utility that makes the dir where claude starts pre-trusted." That utility already existed via `pager trust`, but now it's automatic — every `pager start` quietly re-trusts the launch dir as a no-op-when-already-trusted, and `--cwd` lets users start claude in a specific project dir with auto-trust included. No more "session got stuck on trust prompt" failure mode for non-`$HOME` workflows.
+
+### Notes
+- install.sh stays ASCII-only (caught one em-dash mid-commit, fixed before push). Verified via Python byte scan.
+- shellcheck clean across all shell files. 27/27 smoke tests pass.
+
 ## [0.6.7] — 2026-05-19
 
 `install.sh` now prints a preflight heads-up before doing any work — what's about to happen, which macOS prompts to Allow vs Deny, how to opt out, where to read more.
@@ -575,7 +592,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.7...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.8...HEAD
+[0.6.8]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.8
 [0.6.7]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.7
 [0.6.6]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.6
 [0.6.5]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.5

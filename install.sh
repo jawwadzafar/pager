@@ -91,7 +91,17 @@ fi
 cat <<EOF
 
   After install, run ${c_cyan}pager info${c_reset} any time to see state + commands.
-  Set ${c_cyan}PAGER_TRUST_PATHS${c_reset} in ${c_cyan}~/.pager/.env${c_reset} to pre-trust extra dirs (e.g. ~/code).
+
+  ${c_dim}About ~/.pager/.env (created from template at install time, optional):${c_reset}
+    ${c_dim}Holds optional config -- GH_TOKEN, SSH passwords for inventory hosts,${c_reset}
+    ${c_dim}PAGER_TRUST_PATHS for extra trusted dirs, etc. The basic claude-on-rig${c_reset}
+    ${c_dim}flow works without touching it. See ~/.pager/.env.example for the${c_reset}
+    ${c_dim}full list of variables and what each does.${c_reset}
+
+  ${c_dim}To pre-trust extra project dirs (so claude doesn't show its trust dialog):${c_reset}
+    ${c_dim}pager trust ~/code ~/projects        # one-off${c_reset}
+    ${c_dim}PAGER_TRUST_PATHS in ~/.pager/.env    # persistent across re-bootstraps${c_reset}
+    ${c_dim}pager start --cwd ~/code/myproject   # auto-trust + start there${c_reset}
 
 EOF
 

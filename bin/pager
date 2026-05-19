@@ -86,9 +86,62 @@ cmd_start() {
   if ! command -v claude >/dev/null 2>&1; then
     err "claude (Claude Code CLI) not found on PATH.\n      Install: https://claude.com/code   (or: npm install -g @anthropic-ai/claude-code)\n      Then re-run: pager start"
   fi
-  local session="${1:-claude}"
-  shift || true
-  [ "${1-}" = "--" ] && shift || true
+
+  # Parse flags. Positional args before/after flags are tolerated; the first
+  # non-flag positional becomes the session name. Everything after `--` is
+  # passed through to claude as additional args.
+  local cwd="$HOME"
+  local session=""
+  local extra_args=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --cwd)
+        shift
+        cwd="${1:?--cwd requires a directory argument}"
+        ;;
+      --cwd=*) cwd="${1#--cwd=}" ;;
+      --)
+        shift
+        while [ $# -gt 0 ]; do extra_args+=("$1"); shift || true; done
+        break
+        ;;
+      -h|--help)
+        cat <<EOF
+$(bold "pager start") $(dim "[name] [--cwd DIR] [-- claude-args...]")
+
+  Launch a tmux session running claude. Default session name: claude.
+  Default working directory: \$HOME (which bootstrap pre-trusts).
+
+  $(bold "--cwd DIR")   start claude in DIR instead of \$HOME, and auto-trust DIR
+              (writes the trust flag to ~/.claude.json so claude doesn't
+              hang on its "Trust this folder?" prompt).
+
+  Examples:
+    pager start                         # default session in \$HOME
+    pager start work --cwd ~/code/proj  # 'work' session in that dir
+    pager start -- --some-claude-flag   # pass extra args to claude
+EOF
+        return 0
+        ;;
+      -*) err "Unknown option: $1  (try: pager start --help)" ;;
+      *)
+        if [ -z "$session" ]; then
+          session="$1"
+        else
+          extra_args+=("$1")
+        fi
+        ;;
+    esac
+    shift
+  done
+  session="${session:-claude}"
+
+  # Normalize cwd to an absolute path. If the dir doesn't exist, error early
+  # rather than letting tmux silently fall back to $HOME.
+  if [ ! -d "$cwd" ]; then
+    err "--cwd directory does not exist: $cwd"
+  fi
+  cwd="$(cd "$cwd" && pwd)"
 
   if tmux has-session -t "$session" 2>/dev/null; then
     echo "Session '$session' already running. Attach: pager attach $session"
@@ -102,6 +155,13 @@ cmd_start() {
   mkdir -p "$(dirname "$log")"
   # Clear the stop semaphore so the watchdog resumes health checks.
   rm -f "$(_pager_stop_file)" 2>/dev/null || true
+
+  # Auto-trust the launch directory. Claude's "Trust this folder?" dialog is
+  # per-exact-path and stalls background sessions (the watchdog can't answer
+  # it). Bootstrap already trusts $HOME, but re-trusting here is idempotent
+  # and covers the case where bootstrap's write got clobbered, or the user
+  # passed --cwd to a non-trusted project dir.
+  cmd_trust "$cwd" >/dev/null 2>&1 || true
 
   # claude is launched with --dangerously-skip-permissions by default. There's
   # no human at the keyboard when the LaunchAgent fires at login, so without
@@ -117,15 +177,17 @@ cmd_start() {
   if [ -z "${PAGER_NO_REMOTE:-}" ]; then
     claude_cmd+=" --remote-control $(printf '%q' "$session")"
   fi
-  for arg in "$@"; do
+  for arg in "${extra_args[@]:-}"; do
+    [ -z "$arg" ] && continue
     claude_cmd+=" $(printf '%q' "$arg")"
   done
 
-  tmux new-session -d -s "$session" -c "$HOME" \
+  tmux new-session -d -s "$session" -c "$cwd" \
     "$claude_cmd; echo; echo '[claude exited — tmux session kept; run claude to relaunch]'; exec bash"
   tmux pipe-pane -t "$session":0.0 -o "cat >> '$log'"
 
   echo "Started session '$session'."
+  echo "  cwd:    $cwd  $(dim "(pre-trusted)")"
   echo "  Attach: pager attach $session"
   echo "  Log:    $log"
   echo "  URL:    pager url $session"
