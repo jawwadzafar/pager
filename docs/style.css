@@ -513,6 +513,14 @@ footer a:hover { color: var(--green); }
   border-color: #ff9530;
   text-shadow: 0 0 6px rgba(255, 175, 80, 0.35);
 }
+.os-tag-win {
+  /* Soft violet for Windows; visually distinct from green/blue/amber so the
+     eye separates the four platform pills at a glance. */
+  background: rgba(170, 130, 255, 0.12);
+  color: #b89aff;
+  border-color: #8a6aff;
+  text-shadow: 0 0 6px rgba(170, 130, 255, 0.35);
+}
 
 /* Hero install — make the one-line curl|bash command big and obvious */
 .install-block-hero {

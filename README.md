@@ -14,7 +14,7 @@
   <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs welcome"/></a>
   <img src="https://img.shields.io/badge/tests-23%2F23%20local-success" alt="tests pass locally"/>
   <img src="https://img.shields.io/badge/shell-bash-89e051.svg" alt="Bash"/>
-  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-blue" alt="Linux | macOS"/>
+  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-blue" alt="Linux | macOS | Windows"/>
   <img src="https://img.shields.io/badge/install-one--command-success" alt="one-command install"/>
   <img src="https://img.shields.io/badge/maintained-yes-success.svg" alt="maintained"/>
 </p>
@@ -97,13 +97,21 @@ Each session is independent — separate context, separate URL, separate log at 
 
 ## ⚡ Install
 
-**One command. Works on Linux + macOS.**
+**One command. Linux, macOS, and Windows native (no WSL needed).**
 
+**Linux / macOS** (bash / zsh):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh
 ```
 
-Detects your OS, checks you have `git`, clones `pager` into `~/.pager`, installs deps (apt on Linux, brew on macOS), wires your shell, **and registers the session to come back at every login**. On macOS that means a LaunchAgent; on Linux a systemd `--user` unit. **First login after install on macOS triggers a one-time stack of TCC permission prompts** — see [`macos/README.md`](macos/README.md#after-first-login-on-macos-what-the-prompts-mean) for what's safe to deny (most of them). **Idempotent** — re-run any time to update.
+**Windows** (PowerShell 5.1+ or pwsh 7+) — *alpha, v0.7.0-alpha*:
+```powershell
+irm https://raw.githubusercontent.com/jawwadzafar/pager/main/install.ps1 | iex
+```
+
+Detects your OS, checks you have `git`, clones `pager` into `~/.pager` (or `$env:USERPROFILE\.pager` on Windows), installs deps (apt on Linux, brew on macOS, winget on Windows), wires your shell, **and registers the session to come back at every login**. On macOS that means a LaunchAgent; on Linux a systemd `--user` unit; on Windows a Scheduled Task triggered at logon. **First login after install on macOS triggers a one-time stack of TCC permission prompts** — see [`macos/README.md`](macos/README.md#after-first-login-on-macos-what-the-prompts-mean) for what's safe to deny (most of them). **Idempotent** — re-run any time to update.
+
+> **Windows is alpha.** Pure-PowerShell native install, no WSL. `pager attach` is replaced by `pager logs` (read-only tail) because Windows has no tmux equivalent in `pager` yet — for full PTY-based attach, install WSL2 and use the Linux installer there. Everything else (start/stop/status/url/trust/autostart/uninstall/doctor/info) works the same.
 
 ### Don't want autostart?
 
@@ -172,12 +180,31 @@ cd ~/.pager
 
 ### Uninstall
 
+**Linux / macOS:**
 ```bash
 pager uninstall          # stops the service/LaunchAgent, removes the symlink + shell-rc lines
 rm -rf ~/.pager          # optional: final wipe of the repo + logs + .env
 ```
 
+**Windows:**
+```powershell
+pager uninstall          # stops Scheduled Task + running session, cleans $PROFILE block
+Remove-Item -Recurse -Force $env:USERPROFILE\.pager   # optional: final wipe
+```
+
 `pager uninstall` is **non-destructive** — it tears down system integration but never deletes your `.env` or the repo. Add `-y` to skip the confirmation prompt.
+
+<details>
+<summary>Manual Windows uninstall (if <code>pager uninstall</code> isn't available)</summary>
+
+```powershell
+Unregister-ScheduledTask -TaskName pager -Confirm:$false
+Get-Process | Where-Object { $_.Path -match 'claude' } | Stop-Process -Force
+# Strip the "# pager: auto-load" block from $PROFILE manually, then:
+Remove-Item -Recurse -Force $env:USERPROFILE\.pager
+```
+
+</details>
 
 <details>
 <summary>What the Linux bootstrap does, step by step</summary>
