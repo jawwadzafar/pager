@@ -120,6 +120,44 @@ pager trust --reset $env:USERPROFILE
 
 ---
 
+## Known limitations
+
+### `pager start` claude immediately exits with "Input must be provided ... --print"
+
+**This is the v0.7.0-alpha headline limitation.** Claude Code checks whether
+it's attached to a real terminal (TTY) when it launches. On Linux/macOS, pager
+runs claude inside **tmux**, which provides a PTY, so claude runs interactively
+and you get a `claude.ai/code/session_...` URL.
+
+On Windows, pager spawns claude via `Start-Process` with stdout/stderr
+redirected to log files. That gives claude **no TTY**, so claude switches to
+`--print` mode (the file/pipe mode), looks for piped input, finds nothing, and
+bails with:
+
+```
+Input must be provided either through stdin or as a prompt argument when using --print
+```
+
+**Fixing this properly requires a Windows ConPTY shim** (the Win10 1809+
+pseudoconsole API), which is planned for v0.8 and is the main reason this
+release is alpha-marked. It's not a small change.
+
+**Working paths today**, in order of how well each one is supported:
+
+1. **WSL2 + the Linux installer**. Full PTY via tmux. Everything works exactly
+   as it does on Linux. Recommended if you need a working pager today.
+   ```powershell
+   wsl --install -d Ubuntu       # one-time, requires reboot
+   wsl                            # drop into Ubuntu
+   curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh
+   ```
+2. **Run claude directly in a visible terminal** and let the Scheduled Task
+   recover it on crashes. You lose `pager start` automation but `pager
+   status` / `pager url` / `pager logs` still work against the running PID.
+3. **Wait for v0.8**. Watch the GitHub issue tracker for "Windows ConPTY".
+
+---
+
 ## Honest deviations from Linux / macOS
 
 | Feature | Linux / macOS | Windows |
@@ -138,6 +176,18 @@ instead. That gets you the bash `bin/pager`, tmux, the watchdog, and full
 ---
 
 ## Troubleshooting
+
+### `pager status` shows session as DEAD right after `pager start`
+
+See [Known limitations](#known-limitations) above. The smoking-gun output
+is in `~/.pager/logs/claude.err`:
+
+```
+Input must be provided either through stdin or as a prompt argument when using --print
+```
+
+`pager start` in v0.7.0-alpha-2 detects this case within ~2.5 seconds, prints
+the same explanation, and cleans up the stale PID file automatically.
 
 ### `ssh : OpenSSH_for_Windows_… RemoteException` during bootstrap (1/7)
 
