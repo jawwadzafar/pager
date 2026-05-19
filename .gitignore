@@ -198,3 +198,7 @@ docs/_site/
 *.pre-install-*
 pager-fresh-install.log
 pager.pre-install-*/
+
+# Compiled C launcher binary (built by macos/bootstrap.sh from pager.c).
+# Source is committed; the universal Mach-O output is per-install.
+macos/pager.app/Contents/MacOS/pager

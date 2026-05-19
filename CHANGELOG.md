@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.6] — 2026-05-19
+
+**Mach-O launcher binary.** v0.5.5 finally got the bundle indexed (`mdfind` confirmed `kMDItemCFBundleIdentifier == "com.pager.agent"` returned the path), but Login Items still showed the generic exec icon. Real-Mac diagnostics with `qlmanage`:
+- `qlmanage -t .icns` → succeeded, produced a 6.8 KB thumbnail (icon file is valid).
+- `qlmanage -t pager.app` → **hung indefinitely**, required Ctrl+C.
+
+That asymmetry pinpointed it: macOS Tahoe rejects icon rendering for bundles whose `Contents/MacOS/<executable>` is a shell script (`#!/bin/sh ...`), even when the .icns + Info.plist + LaunchServices indexing + `AssociatedBundleIdentifiers` are all correct. The bundle has to have a Mach-O binary launcher.
+
+### Fixed
+- **Added `macos/pager.app/Contents/MacOS/pager.c`** — a ~30-line C launcher that `execv`s `$PAGER_ROOT/bin/pager` (falling back to `~/.pager/bin/pager` if `PAGER_ROOT` is unset). Passes argv through unchanged.
+- **Bootstrap step 10c compiles it** via `clang -arch arm64 -arch x86_64 -O2 -mmacosx-version-min=11.0` — universal binary that runs on both Apple Silicon and Intel, and loads on Sequoia 15+ / Tahoe 26+.
+- The compiled binary replaces the old shell-script launcher at the same path. Codesign now signs a real Mach-O instead of a script.
+- `clang` is a hard requirement now (already implied by Homebrew install, which Xcode CLT provides) — bootstrap fails fast with a clear message if it's missing.
+- Removed `macos/pager.app/Contents/MacOS/pager` (the shell launcher) from the repo; replaced with `pager.c` source. The compiled binary is gitignored (built per install).
+- `Info.plist` `CFBundleVersion` + `CFBundleShortVersionString` bumped to `0.5.6` to invalidate any cached metadata.
+
+### Why the "Item from unidentified developer" label persists
+BTM showed `Parent Identifier: Unknown Developer` in the dump. That's the label macOS attaches to all ad-hoc-signed (no Apple Developer ID) entries — and it's fundamental to BTM's grouping in the Login Items UI. **Without paying Apple $99/year for a Developer ID, that label cannot change.** The same label appears for Ollama, Homebrew `brew services` entries, and other ad-hoc-signed background items. The icon is separate from the label — v0.5.6 fixes the icon part; the label is just how macOS marks unsigned items.
+
+### Migration
+1. `cd ~/.pager && git pull`
+2. `./macos/bootstrap.sh` — compiles the C launcher, copies the bundle to `~/Applications`, ad-hoc signs.
+3. Verify:
+   ```bash
+   file ~/Applications/pager.app/Contents/MacOS/pager
+   # expect: Mach-O universal binary with 2 architectures: [arm64] [x86_64]
+   ```
+4. Reopen System Settings → General → Login Items & Extensions. Quit System Settings entirely if it was open (`Cmd+Q`) before reopening.
+5. The pager row should now show the actual icon. The label will still say "Item from unidentified developer" — that part is permanent without a paid Developer ID, see above.
+
 ## [0.5.5] — 2026-05-19
 
 **The bundle was never actually getting indexed.** v0.5.4 added `AssociatedBundleIdentifiers` to the plist correctly, and ad-hoc codesigned the bundle correctly, and called `lsregister -f` correctly — but real-Mac diagnostics caught that `mdfind 'kMDItemCFBundleIdentifier == "com.pager.agent"'` returned **empty** after the install. LaunchServices/Spotlight never actually indexed the bundle. With no indexed bundle for that ID, `AssociatedBundleIdentifiers` has nothing to resolve to, and Login Items falls back to generic exec.
@@ -386,7 +416,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.5.6...HEAD
+[0.5.6]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.6
 [0.5.5]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.5
 [0.5.4]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.4
 [0.5.3]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.3

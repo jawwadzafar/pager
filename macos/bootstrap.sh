@@ -282,24 +282,43 @@ ok "Rendered com.pager.agent.plist"
 # copy at ~/Applications/pager.app is purely metadata; actual execution
 # routes back to the canonical install at $PAGER_ROOT/bin/pager.
 
+# Compile the C launcher to a real Mach-O binary BEFORE copying the
+# bundle. This is what 0.5.6 added — Tahoe refused to render icons for
+# bundles whose Contents/MacOS executable is a shell script (qlmanage
+# would hang on the bundle while succeeding on the .icns individually).
+# clang ships with Xcode CLT, which Homebrew already requires, so this
+# is a hard dependency we already pay for.
+PAGER_C_SRC="$__PAGER_ROOT/macos/pager.app/Contents/MacOS/pager.c"
+PAGER_C_OUT="$__PAGER_ROOT/macos/pager.app/Contents/MacOS/pager"
+if [ -f "$PAGER_C_SRC" ]; then
+  if ! command -v clang >/dev/null 2>&1; then
+    err "clang not found — needed to build the pager.app launcher. Run:  xcode-select --install"
+    exit 1
+  fi
+  # Universal binary: one file runs on both arm64 (Apple Silicon) and
+  # x86_64 (Intel). -O2 because the binary is tiny; -mmacosx-version-min
+  # sets the deployment target so the binary loads on Sequoia (15) too.
+  clang -arch arm64 -arch x86_64 -O2 -mmacosx-version-min=11.0 \
+    -o "$PAGER_C_OUT" "$PAGER_C_SRC" 2>/dev/null
+  chmod +x "$PAGER_C_OUT"
+  ok "Compiled universal pager launcher (arm64 + x86_64)"
+fi
+
 APPS_DIR="$HOME/Applications"
 mkdir -p "$APPS_DIR"
 APP_COPY="$APPS_DIR/pager.app"
 
-# Wipe whatever's at APP_COPY (could be a stale symlink from 0.5.3+,
-# or an old copy from a prior 0.5.5+ run). rm -rf handles both cases.
+# Wipe whatever's at APP_COPY (could be a stale symlink from 0.5.3-0.5.4,
+# a directory copy from 0.5.5, or an older 0.5.6 build). rm -rf handles all.
 rm -rf "$APP_COPY"
 
 # Copy the bundle as a real directory. cp -R preserves structure,
-# permissions, and the executable bit on Contents/MacOS/pager. Adding
-# a -c (clone if APFS) would be slightly faster on Apple Silicon but
-# isn't portable to Intel — keep plain -R.
+# permissions, and the executable bit on the compiled launcher.
 cp -R "$__PAGER_ROOT/macos/pager.app" "$APP_COPY"
 ok "Copied pager.app -> $APP_COPY"
 
-# Ad-hoc codesign the COPY. The `-s -` identity is anonymous signing,
-# no Apple Developer ID needed. Improves Gatekeeper's icon-resolution
-# reliability — unsigned bundles can get treated as untrusted.
+# Ad-hoc codesign the COPY (recursively signs the launcher binary inside).
+# `-s -` is anonymous signing — no Apple Developer ID needed.
 if command -v codesign >/dev/null 2>&1; then
   codesign --force --sign - "$APP_COPY" 2>/dev/null || true
   ok "Ad-hoc codesigned $APP_COPY"
