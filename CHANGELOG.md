@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.9] — 2026-05-19
+
+Self-healing diagnostics + sharper error messages.
+
+### Added — `pager doctor --fix`
+- New `--fix` flag on `pager doctor` attempts safe auto-fixes for every failing check it finds. Each fix is OS-aware (works the same on Mac via launchctl / on Linux via systemctl). When a fix succeeds, the check prints with a `[auto-fixed]` tag.
+- Auto-fixable without side effects:
+  - **`.env` perms wrong** → `chmod 600`
+  - **`.env` missing** → copy from `.env.example` + chmod
+  - **Trust flag missing for `$HOME`** → run `pager trust $HOME`
+  - **`~/.claude.json` missing entirely** → create + pre-trust `$HOME`
+  - **LaunchAgent installed but not loaded** (macOS) → `launchctl bootstrap`
+  - **`pager.service` installed but not active** (Linux) → `systemctl --user start`
+  - **`pager-watch.timer` not active** (Linux) → `systemctl --user enable --now`
+- Side-effect fixes that require `--fix --yes` (the `-y` is a confirmation gate for things that change system state more invasively):
+  - **autostart not installed at all** → `pager autostart enable` (triggers macOS TCC prompts at next login, hence the gate)
+- Fixes that are NOT auto-attempted (because they need package managers / sudo):
+  - missing `tmux`, `claude`, `python3` — print the install hint, skip
+- Verdict line at the end shows `auto-fixed: N` count when `--fix` is on. When `--fix` is off and there are issues, prints a hint about `pager doctor --fix`.
+
+### Added — better error messages with copy-paste commands
+- **`pager attach <nonexistent>`** now prints a real error with the exact start command and a pointer to `pager status`. Previously: just exec'd tmux which printed its own less-helpful error.
+- **`pager url --all`** with no running sessions prints "No tmux sessions running. Start one with: pager start" instead of nothing.
+- **`pager url <name>`** for a missing session prints the session name + "start with: pager start <name>" hint inline.
+- Doctor's `fail`/`warn` hints throughout now end with `(or: pager doctor --fix)` where applicable, so users see both the manual command AND the auto-fix path.
+
+### Notes
+- 28/28 smoke tests pass (added two: `attach: nonexistent session hint`, the `doctor --fix` no-op path is covered by the existing "doctor passes" test).
+- shellcheck clean.
+- Works identically on Mac (launchctl) and Linux (systemctl) — same `pager doctor --fix` invocation on both platforms.
+
 ## [0.6.8] — 2026-05-19
 
 `pager start` now auto-trusts whatever directory it launches claude in, and accepts `--cwd` to start in a project dir other than `$HOME`. Plus the install heads-up explains what `~/.pager/.env` is for.
@@ -592,7 +623,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.8...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.9...HEAD
+[0.6.9]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.9
 [0.6.8]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.8
 [0.6.7]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.7
 [0.6.6]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.6

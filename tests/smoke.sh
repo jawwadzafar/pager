@@ -244,6 +244,14 @@ else
   printf '  \033[32m✓\033[0m start: --cwd nonexistent fails\n'; pass=$((pass+1))
 fi
 
+# 9d0. `pager attach` to a nonexistent session should fail cleanly with hint.
+total=$((total+1))
+attach_out=$(env TMUX_TMPDIR="$TMUX_TMPDIR" "$PAGER" attach no-such-session-zzz 2>&1 || true)
+case "$attach_out" in
+  *"no tmux session"*"pager start"*) printf '  \033[32m✓\033[0m attach: nonexistent session hint\n'; pass=$((pass+1)) ;;
+  *) printf '  \033[31m✗\033[0m attach: nonexistent session hint\n'; fail=$((fail+1)) ;;
+esac
+
 # 9d. `pager info` should render without errors and include a version line.
 # Custom check rather than check_output because info's stdout is long enough
 # to trip SIGPIPE (exit 141) when grep -q closes the pipe early under
