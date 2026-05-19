@@ -45,6 +45,57 @@ function Get-PythonExe {
     return $null
 }
 
+# Read trust state from ~/.claude.json via Python (which doesn't choke on the
+# duplicate-key JSON shapes claude sometimes writes -- PS 5.1 ConvertFrom-Json
+# does, and PS7's -AsHashtable isn't available on 5.1).
+# Returns @{ ok = $true; paths = @(...); home = $bool } on success,
+#         @{ ok = $false; error = "..." } on failure.
+function Get-TrustState {
+    $claudeJson = "$env:USERPROFILE\.claude.json"
+    if (-not (Test-Path $claudeJson)) {
+        return @{ ok = $false; error = "~/.claude.json not found" }
+    }
+    $py = Get-PythonExe
+    if (-not $py) {
+        return @{ ok = $false; error = "python not available to parse JSON" }
+    }
+    $script = @'
+import json, os, sys
+p = os.path.expanduser('~/.claude.json')
+try:
+    with open(p) as f: d = json.load(f)
+except Exception as e:
+    print('__ERROR__:' + str(e))
+    sys.exit(0)
+home = os.path.expanduser('~')
+projects = d.get('projects') or {}
+home_ok = False
+trusted = []
+for path, entry in projects.items():
+    if not isinstance(entry, dict): continue
+    if entry.get('hasTrustDialogAccepted') and entry.get('hasCompletedProjectOnboarding'):
+        trusted.append(path)
+        if path == home:
+            home_ok = True
+print('__HOME__:' + ('1' if home_ok else '0'))
+for t in sorted(trusted):
+    print(t)
+'@
+    $captured = & $py -c $script 2>&1
+    $lines = @($captured | ForEach-Object { "$_" })
+    if ($lines.Count -gt 0 -and $lines[0] -match "^__ERROR__:") {
+        return @{ ok = $false; error = ($lines[0] -replace "^__ERROR__:","") }
+    }
+    $homeOk = $false
+    $paths = New-Object System.Collections.Generic.List[string]
+    foreach ($l in $lines) {
+        if ($l -match "^__HOME__:1") { $homeOk = $true; continue }
+        if ($l -match "^__HOME__:0") { $homeOk = $false; continue }
+        if ($l) { $paths.Add($l) | Out-Null }
+    }
+    return @{ ok = $true; home = $homeOk; paths = $paths.ToArray() }
+}
+
 function Get-PagerProcesses {
     # Find pager-managed claude processes via tracked PID files in logs/.
     if (-not (Test-Path $PagerLogsDir)) { return @() }
@@ -166,6 +217,45 @@ function Invoke-PagerStart {
     }
     $proc.Id | Out-File -FilePath $pidPath -Encoding ascii -Force
 
+    # Sanity check: claude often dies within 2s on Windows because Start-Process
+    # doesn't give it a TTY and our stdout/stderr redirection makes claude
+    # think it's in pipe/--print mode. Surface that immediately instead of
+    # leaving a stale PID file for the user to discover via 'pager status'.
+    Start-Sleep -Milliseconds 2500
+    $alive = $true
+    try { Get-Process -Id $proc.Id -ErrorAction Stop | Out-Null } catch { $alive = $false }
+
+    if (-not $alive) {
+        Write-Host ""
+        Write-Host "WARNING: claude exited within 2.5 seconds." -ForegroundColor Yellow
+        $errContent = ""
+        if (Test-Path $errPath) {
+            try { $errContent = (Get-Content -Path $errPath -Raw -ErrorAction SilentlyContinue) } catch {}
+        }
+        if ($errContent) {
+            Write-Host ""
+            Write-Host "--- claude stderr ($errPath) ---" -ForegroundColor DarkGray
+            Write-Host $errContent.TrimEnd() -ForegroundColor DarkGray
+            Write-Host "--------------------------------" -ForegroundColor DarkGray
+            Write-Host ""
+        }
+        if ($errContent -match "Input must be provided" -or $errContent -match "--print") {
+            Write-Host "This is a known v0.7.0-alpha Windows limitation:" -ForegroundColor Yellow
+            Write-Host "  claude detects no TTY and switches to --print mode, then bails because"
+            Write-Host "  no piped input is available. pager doesn't yet ship a Windows ConPTY"
+            Write-Host "  shim to give claude a real terminal in the background."
+            Write-Host ""
+            Write-Host "Workarounds:" -ForegroundColor Yellow
+            Write-Host "  1. Use WSL2 + the Linux installer (full PTY via tmux) -- this works today"
+            Write-Host "  2. Run claude in a visible terminal yourself; pager will track it later"
+            Write-Host "  3. Watch issue tracker for v0.8 (ConPTY-backed Windows sessions)"
+            Write-Host ""
+            Write-Host "Details: windows/README.md#known-limitations"
+        }
+        Remove-Item -Path $pidPath -ErrorAction SilentlyContinue
+        exit 1
+    }
+
     Write-Host "Started session '$Session'."
     Write-Host "  PID:    $($proc.Id)"
     Write-Host "  cwd:    $Cwd  (pre-trusted)"
@@ -240,14 +330,34 @@ function Invoke-PagerUrl {
 function Invoke-PagerLogs {
     param([string]$Session = "claude")
     $logPath = Join-Path $PagerLogsDir "$Session.log"
-    if (-not (Test-Path $logPath)) {
-        Write-Host "No log: $logPath" -ForegroundColor Yellow
+    $errPath = Join-Path $PagerLogsDir "$Session.err"
+    $haveLog = Test-Path $logPath
+    $haveErr = Test-Path $errPath
+    if (-not $haveLog -and -not $haveErr) {
+        Write-Host "No log files for session '$Session' at $PagerLogsDir" -ForegroundColor Yellow
         Write-Host "Start a session: pager start $Session"
         exit 1
     }
-    Write-Host "Tailing $logPath  (Ctrl-C to detach; the session keeps running)"
-    Write-Host ""
-    Get-Content -Path $logPath -Tail 50 -Wait
+
+    # If stderr has content, show it first -- it's almost always the reason
+    # claude isn't producing the expected stdout.
+    if ($haveErr) {
+        try { $errSize = (Get-Item $errPath -ErrorAction Stop).Length } catch { $errSize = 0 }
+        if ($errSize -gt 0) {
+            Write-Host "--- stderr: $errPath ---" -ForegroundColor Yellow
+            Get-Content -Path $errPath
+            Write-Host "--- end stderr ---" -ForegroundColor Yellow
+            Write-Host ""
+        }
+    }
+
+    if ($haveLog) {
+        Write-Host "Tailing $logPath  (Ctrl-C to detach; the session keeps running)" -ForegroundColor DarkGray
+        Write-Host ""
+        Get-Content -Path $logPath -Tail 50 -Wait
+    } else {
+        Write-Host "(no stdout log yet -- $logPath)" -ForegroundColor DarkGray
+    }
 }
 
 function Invoke-PagerTrust {
@@ -483,27 +593,15 @@ function Invoke-PagerInfo {
     # Trusted folders
     Write-Host "Trusted folders   " -ForegroundColor White -NoNewline
     Write-Host "(Claude Code's `"Trust this folder?`" dialog won't fire)" -ForegroundColor DarkGray
-    $claudeJson = "$env:USERPROFILE\.claude.json"
-    if (Test-Path $claudeJson) {
-        try {
-            $d = Get-Content -Raw $claudeJson | ConvertFrom-Json
-            if ($d.projects) {
-                $trustedPaths = $d.projects.PSObject.Properties | Where-Object {
-                    $_.Value.hasTrustDialogAccepted -eq $true -and $_.Value.hasCompletedProjectOnboarding -eq $true
-                } | Sort-Object Name | ForEach-Object { $_.Name }
-                if ($trustedPaths) {
-                    foreach ($t in $trustedPaths) { Write-Host "    $t" -ForegroundColor Green }
-                } else {
-                    Write-Host "    (none -- bootstrap normally trusts `$env:USERPROFILE)" -ForegroundColor Yellow
-                }
-            } else {
-                Write-Host "    (no projects in ~/.claude.json yet)" -ForegroundColor Yellow
-            }
-        } catch {
-            Write-Host "    (couldn't parse ~/.claude.json: $_)" -ForegroundColor Yellow
+    $trust = Get-TrustState
+    if ($trust.ok) {
+        if ($trust.paths -and $trust.paths.Count -gt 0) {
+            foreach ($t in $trust.paths) { Write-Host "    $t" -ForegroundColor Green }
+        } else {
+            Write-Host "    (none -- bootstrap normally trusts `$env:USERPROFILE)" -ForegroundColor Yellow
         }
     } else {
-        Write-Host "    (~/.claude.json not yet created)" -ForegroundColor Yellow
+        Write-Host "    ($($trust.error))" -ForegroundColor Yellow
     }
     Write-Host ""
     Write-Host "  pager trust C:\code\myproject         ad-hoc"
@@ -531,49 +629,47 @@ function Invoke-PagerDoctor {
     Write-Host "   $PagerRoot" -ForegroundColor DarkGray
     Write-Host ""
 
-    $fails = 0
-    $warns = 0
-    function Pass($msg) { Write-Host "  OK $msg" -ForegroundColor Green }
-    function Warn($msg, $hint) {
+    # Use a hashtable so nested helper functions can mutate counters without
+    # running into PowerShell's $script: vs local scope gotcha (the previous
+    # impl always reported "all checks passed" because $script:warns and the
+    # local $warns were two different variables).
+    $c = @{ fails = 0; warns = 0 }
+    $Pass = { param($msg) Write-Host "  OK $msg" -ForegroundColor Green }
+    $Warn = {
+        param($msg, $hint)
         Write-Host "  !  $msg" -ForegroundColor Yellow
         if ($hint) { Write-Host "     -> $hint" -ForegroundColor DarkGray }
-        $script:warns += 1
+        $c.warns += 1
     }
-    function Fail($msg, $hint) {
+    $Fail = {
+        param($msg, $hint)
         Write-Host "  X  $msg" -ForegroundColor Red
         if ($hint) { Write-Host "     -> $hint" -ForegroundColor DarkGray }
-        $script:fails += 1
+        $c.fails += 1
     }
 
     Write-Host "Dependencies"
-    if (Get-Command git    -ErrorAction SilentlyContinue) { Pass "git" }    else { Fail "git missing" "winget install Git.Git" }
-    if (Get-Command claude -ErrorAction SilentlyContinue) { Pass "claude" } else { Warn "claude not on PATH" "Install: https://claude.com/code" }
-    if (Get-PythonExe) { Pass "python" } else { Warn "python missing" "winget install Python.Python.3.12" }
+    if (Get-Command git    -ErrorAction SilentlyContinue) { & $Pass "git" }    else { & $Fail "git missing" "winget install Git.Git" }
+    if (Get-Command claude -ErrorAction SilentlyContinue) { & $Pass "claude" } else { & $Warn "claude not on PATH" "Install: https://claude.com/code" }
+    if (Get-PythonExe) { & $Pass "python" } else { & $Warn "python missing" "winget install Python.Python.3.12" }
 
     Write-Host ""
     Write-Host "Trust"
-    $claudeJson = "$env:USERPROFILE\.claude.json"
-    if (Test-Path $claudeJson) {
-        try {
-            $d = Get-Content -Raw $claudeJson | ConvertFrom-Json
-            $home = "$env:USERPROFILE"
-            $proj = $d.projects.$home
-            if ($proj.hasTrustDialogAccepted -eq $true) { Pass "`$env:USERPROFILE pre-trusted" }
-            else { Warn "`$env:USERPROFILE not trusted" "pager trust" }
-        } catch {
-            Warn "couldn't parse ~/.claude.json: $_" $null
-        }
+    $trust = Get-TrustState
+    if ($trust.ok) {
+        if ($trust.home) { & $Pass "`$env:USERPROFILE pre-trusted" }
+        else { & $Warn "`$env:USERPROFILE not trusted" "pager trust" }
     } else {
-        Warn "~/.claude.json not found" "Install claude, then: pager trust"
+        & $Warn "trust state: $($trust.error)" "pager trust"
     }
 
     Write-Host ""
     Write-Host "Autostart"
     try {
         $task = Get-ScheduledTask -TaskName "pager" -ErrorAction Stop
-        Pass "Scheduled Task 'pager' present (state: $($task.State))"
+        & $Pass "Scheduled Task 'pager' present (state: $($task.State))"
     } catch {
-        Warn "no Scheduled Task 'pager'" "pager autostart enable"
+        & $Warn "no Scheduled Task 'pager'" "pager autostart enable"
     }
 
     Write-Host ""
@@ -581,22 +677,22 @@ function Invoke-PagerDoctor {
     $procs = Get-PagerProcesses
     if ($procs) {
         foreach ($p in $procs) {
-            if ($p.Alive) { Pass "session '$($p.Session)' alive (PID $($p.PID))" }
-            else          { Warn "session '$($p.Session)' DEAD (stale PID file)" "pager stop $($p.Session)" }
+            if ($p.Alive) { & $Pass "session '$($p.Session)' alive (PID $($p.PID))" }
+            else          { & $Warn "session '$($p.Session)' DEAD (stale PID file)" "pager stop $($p.Session)" }
         }
     } else {
-        Warn "no active sessions" "pager start"
+        & $Warn "no active sessions" "pager start"
     }
 
     Write-Host ""
-    if ($fails -eq 0 -and $warns -eq 0) {
+    if ($c.fails -eq 0 -and $c.warns -eq 0) {
         Write-Host "OK all checks passed" -ForegroundColor Green
         exit 0
-    } elseif ($fails -eq 0) {
-        Write-Host "!  warnings: $warns (non-fatal)" -ForegroundColor Yellow
+    } elseif ($c.fails -eq 0) {
+        Write-Host "!  warnings: $($c.warns) (non-fatal)" -ForegroundColor Yellow
         exit 0
     } else {
-        Write-Host "X  failures: $fails   warnings: $warns" -ForegroundColor Red
+        Write-Host "X  failures: $($c.fails)   warnings: $($c.warns)" -ForegroundColor Red
         exit 1
     }
 }

@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0-alpha-2] — 2026-05-19
+
+Second hotfix on the Windows alpha. Headline finding: **claude requires a TTY
+that v0.7.0-alpha doesn't yet provide on Windows.** This release makes that
+fact loud and documented; the actual fix (ConPTY-backed sessions) is queued
+for v0.8.
+
+### Found
+- **`pager start` succeeds, claude dies, `pager status` shows DEAD.** Cause:
+  Claude Code switches to `--print` mode when it can't detect a TTY (which
+  happens because `Start-Process -RedirectStandardOutput/-Error` writes to
+  files, not a terminal). claude then looks for piped input, finds none,
+  exits with `Input must be provided either through stdin or as a prompt
+  argument when using --print`. Stack: native Windows lacks a tmux-equivalent
+  PTY for background processes; ConPTY (Win10 1809+) is the path forward.
+
+### Added
+- **`pager start` now detects the early-exit case** within 2.5 seconds of
+  launching claude. If claude died, reads `<session>.err`, prints the stderr,
+  and if it matches the TTY-bailout pattern, prints an explanation pointing
+  at `windows/README.md#known-limitations` and the WSL2 workaround. Cleans
+  up the stale PID file automatically so `pager status` doesn't lie.
+- **`pager logs` now shows `<session>.err` before tailing `<session>.log`.**
+  Previously stderr was invisible, which is how this whole investigation
+  started.
+- **`windows/README.md#known-limitations`** — full writeup of the TTY issue
+  with WSL2 as the recommended working path until v0.8 ships ConPTY support.
+
+### Fixed
+- **`pager doctor` said "OK all checks passed" while showing warnings.**
+  PowerShell scope gotcha: nested `Warn`/`Fail` helpers incremented
+  `$script:warns`, but the verdict block read local `$warns`. They were two
+  different variables. Refactored to use a hashtable counter (`$c.warns` /
+  `$c.fails`) that the script-block helpers can mutate directly.
+- **`pager doctor` and `pager info` errored on `~/.claude.json` with**
+  `Cannot convert the JSON string because a dictionary that was converted
+  from the string contains duplicated keys`. PS 5.1's `ConvertFrom-Json`
+  rejects duplicate keys; claude sometimes writes them. Switched to a
+  shared `Get-TrustState` helper that delegates JSON parsing to Python
+  (already installed via bootstrap), which handles duplicates by last-write.
+
 ## [0.7.0-alpha-1] — 2026-05-19
 
 Hotfix for v0.7.0-alpha based on first real-user test (Win11 + PowerShell 5.1).
