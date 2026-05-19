@@ -46,6 +46,55 @@ esac
 
 log "pager installer  ${c_dim}(os: $OS, target: $TARGET, branch: $BRANCH)${c_reset}"
 
+# -- preflight: tell the user what's about to happen --
+# This runs BEFORE clone / package install / autostart registration so users
+# know what they're signing up for and how to opt out. macOS gets a bigger
+# warning because of the first-login TCC permission storm.
+cat <<EOF
+
+  ${c_cyan}About to install pager. Here's what happens:${c_reset}
+
+    1. Clone the pager repo into ${c_cyan}$TARGET${c_reset}
+EOF
+if [ "$OS" = mac ]; then
+  cat <<EOF
+    2. Install Homebrew (if missing -- prompts for your Mac password once)
+    3. Install ${c_cyan}tmux libyaml${c_reset} via brew; ${c_cyan}pyyaml${c_reset} via pip --user
+    4. Wire ${c_cyan}~/.zprofile${c_reset} + ${c_cyan}~/.zshrc${c_reset}
+    5. Pre-trust ${c_cyan}\$HOME${c_reset} in ${c_cyan}~/.claude.json${c_reset} so claude won't show its trust dialog
+    6. Register a LaunchAgent so pager comes back at every login
+
+  ${c_yellow}!! At first login after install, macOS will pop up TCC prompts. !!${c_reset}
+     The ONLY one you need to ${c_green}Allow${c_reset} is:
+        ${c_cyan}"tmux" would like to access data from other apps${c_reset}   ${c_dim}(App Management)${c_reset}
+     ${c_yellow}Deny${c_reset} the rest -- pager doesn't need any of them:
+        Full Disk Access, Music, Photos, Contacts, Documents, Downloads, Desktop
+     Choices are remembered. Subsequent logins are quiet.
+
+  Don't want autostart at all? Re-run with ${c_cyan}--no-autostart${c_reset}:
+        ${c_dim}curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh -s -- --no-autostart${c_reset}
+EOF
+else
+  cat <<EOF
+    2. Install ${c_cyan}tmux sshpass python3-yaml openssh-client${c_reset} via apt
+    3. Wire ${c_cyan}~/.bashrc${c_reset}
+    4. Pre-trust ${c_cyan}\$HOME${c_reset} in ${c_cyan}~/.claude.json${c_reset} so claude won't show its trust dialog
+    5. Register systemd --user units so pager comes back at login
+
+  ${c_dim}For boot-time start before any login, separately run after install:${c_reset}
+        ${c_cyan}sudo loginctl enable-linger \$USER${c_reset}
+
+  Don't want autostart at all? Re-run with ${c_cyan}--no-autostart${c_reset}:
+        ${c_dim}curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh -s -- --no-autostart${c_reset}
+EOF
+fi
+cat <<EOF
+
+  After install, run ${c_cyan}pager info${c_reset} any time to see state + commands.
+  Set ${c_cyan}PAGER_TRUST_PATHS${c_reset} in ${c_cyan}~/.pager/.env${c_reset} to pre-trust extra dirs (e.g. ~/code).
+
+EOF
+
 # -- git is required --
 if ! command -v git >/dev/null 2>&1; then
   if [ "$OS" = mac ]; then

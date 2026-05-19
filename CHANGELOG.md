@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.7] — 2026-05-19
+
+`install.sh` now prints a preflight heads-up before doing any work — what's about to happen, which macOS prompts to Allow vs Deny, how to opt out, where to read more.
+
+### Added
+- **Preflight section in `install.sh`** runs after OS detection but before `git clone`. Lists numbered install steps for the detected OS. On macOS, includes a prominent table of the TCC prompts users will see at first login: which to Allow (`tmux` App Management) and which to Deny (Full Disk Access, Music, Photos, Contacts, Documents, Downloads, Desktop). Lists the `--no-autostart` opt-out one-liner with a copy-pasteable curl invocation. Points at `pager info` for post-install state and `PAGER_TRUST_PATHS` for declarative trust.
+
+### Why
+Previous behavior: `install.sh` kicked straight into `git clone` after detecting OS, gave no preview of what was coming. Users who ran `curl | sh` on macOS were surprised by the TCC prompt storm at first login — even though `macos/README.md` documented it, you'd have to know to read the docs first. Now the install itself shows the heads-up, in the same terminal, right before doing the install. No surprises.
+
+### Notes
+- 26/26 smoke tests pass; install.sh stays ASCII-only (re-checked, fixed two em-dashes that slipped in).
+- shellcheck `-s sh` clean.
+
 ## [0.6.6] — 2026-05-19
 
 `pager info` — the install-time banner now exists as a real command you can run any time to see what's installed, what's trusted, what's running.
@@ -561,7 +575,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.6...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.7...HEAD
+[0.6.7]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.7
 [0.6.6]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.6
 [0.6.5]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.5
 [0.6.4]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.4
