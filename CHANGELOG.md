@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0-alpha-1] — 2026-05-19
+
+Hotfix for v0.7.0-alpha based on first real-user test (Win11 + PowerShell 5.1).
+
+### Fixed
+- **Bootstrap died on step 1/7 dependencies** when OpenSSH was already
+  installed. `ssh -V` writes its version banner to stderr, and under
+  PowerShell's `$ErrorActionPreference = "Stop"` that gets treated as a
+  terminating `NativeCommandError`/`RemoteException`. Added a defensive
+  `Get-NativeVersion` helper that scoped-flips `$ErrorActionPreference` to
+  `Continue` around native-command version probes, then restores. Applied to
+  `git --version`, `ssh -V`, and `python --version` — all three were the same
+  shape of bug, only `ssh` triggered it because git/python write to stdout on
+  most modern versions.
+
+### Added
+- `windows/README.md` — full Windows install / uninstall / troubleshooting
+  page (mirrors how `macos/README.md` works). Main README now points to it
+  for deeper Windows details to keep the top-level README cross-platform.
+
 ## [0.7.0-alpha] — 2026-05-19
 
 **Native Windows port (no WSL).** Alpha: tagged but NOT a GitHub Release — v0.6.9 stays the "Latest Release" badge until Windows has gone through real-user testing on a Win10 + Win11 box.

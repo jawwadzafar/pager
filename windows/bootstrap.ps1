@@ -21,6 +21,26 @@ function Ok   ($msg) { Write-Host "    OK $msg" -ForegroundColor Green }
 function Warn ($msg) { Write-Host "    !  $msg" -ForegroundColor Yellow }
 function Die  ($msg) { Write-Host "    ERROR: $msg" -ForegroundColor Red; exit 1 }
 
+# Get the version string from a native command (e.g. `ssh -V`, `git --version`)
+# without exploding under $ErrorActionPreference="Stop" when the command writes
+# to stderr (ssh -V writes to stderr by design). Returns "" on any failure.
+function Get-NativeVersion {
+    param([scriptblock]$Cmd)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $out = ""
+    try {
+        $captured = & $Cmd 2>&1
+        $out = ($captured | Out-String).Trim()
+    } catch {
+        $out = ""
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+    if (-not $out) { return "" }
+    return ($out -split "`r?`n" | Select-Object -First 1).Trim()
+}
+
 # --- 1. dependencies via winget -------------------------------------------
 Log "1/7 dependencies"
 
@@ -28,7 +48,8 @@ Log "1/7 dependencies"
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Die "git not on PATH. Reopen PowerShell after the winget install."
 } else {
-    Ok "git $((git --version) -replace '^git version ','')"
+    $gitVer = (Get-NativeVersion { git --version }) -replace '^git version ',''
+    if ($gitVer) { Ok "git $gitVer" } else { Ok "git installed" }
 }
 
 # OpenSSH client (built-in on Win10 1803+, but ensure it's installed).
@@ -42,7 +63,8 @@ if (-not (Get-Command ssh -ErrorAction SilentlyContinue)) {
         Warn "Install manually: Settings -> Apps -> Optional features -> OpenSSH Client."
     }
 } else {
-    Ok "ssh $((ssh -V 2>&1) -replace '^OpenSSH_','')"
+    $sshVer = (Get-NativeVersion { ssh -V }) -replace '^OpenSSH_',''
+    if ($sshVer) { Ok "ssh $sshVer" } else { Ok "ssh installed" }
 }
 
 # Python (needed for inventory YAML parsing + ~/.claude.json editing).
@@ -65,10 +87,12 @@ if (-not $pythonExe) {
         Warn "python not found. Install from https://www.python.org/downloads/windows/"
         Warn "  pager will install; 'pager ssh' inventory parsing won't work until python is installed."
     } else {
-        Ok "python $(& $pythonExe --version 2>&1)"
+        $pyVer = Get-NativeVersion { & $pythonExe --version }
+        if ($pyVer) { Ok "python $pyVer" } else { Ok "python installed" }
     }
 } else {
-    Ok "python $(& $pythonExe --version 2>&1)"
+    $pyVer = Get-NativeVersion { & $pythonExe --version }
+    if ($pyVer) { Ok "python $pyVer" } else { Ok "python installed" }
 }
 
 # --- 2. pager dir structure -----------------------------------------------

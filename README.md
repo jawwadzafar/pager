@@ -104,14 +104,14 @@ Each session is independent — separate context, separate URL, separate log at 
 curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh
 ```
 
-**Windows** (PowerShell 5.1+ or pwsh 7+) — *alpha, v0.7.0-alpha*:
+**Windows** (PowerShell 5.1+ or pwsh 7+) — *alpha, see [`windows/README.md`](windows/README.md)*:
 ```powershell
 irm https://raw.githubusercontent.com/jawwadzafar/pager/main/install.ps1 | iex
 ```
 
 Detects your OS, checks you have `git`, clones `pager` into `~/.pager` (or `$env:USERPROFILE\.pager` on Windows), installs deps (apt on Linux, brew on macOS, winget on Windows), wires your shell, **and registers the session to come back at every login**. On macOS that means a LaunchAgent; on Linux a systemd `--user` unit; on Windows a Scheduled Task triggered at logon. **First login after install on macOS triggers a one-time stack of TCC permission prompts** — see [`macos/README.md`](macos/README.md#after-first-login-on-macos-what-the-prompts-mean) for what's safe to deny (most of them). **Idempotent** — re-run any time to update.
 
-> **Windows is alpha.** Pure-PowerShell native install, no WSL. `pager attach` is replaced by `pager logs` (read-only tail) because Windows has no tmux equivalent in `pager` yet — for full PTY-based attach, install WSL2 and use the Linux installer there. Everything else (start/stop/status/url/trust/autostart/uninstall/doctor/info) works the same.
+> **Windows is alpha.** Pure-PowerShell native install, no WSL. `pager attach` is replaced by `pager logs` (read-only tail) because Windows has no tmux equivalent in `pager` yet. Everything else (start/stop/status/url/trust/autostart/uninstall/doctor/info) works the same. Full Windows install/uninstall/troubleshooting in [`windows/README.md`](windows/README.md).
 
 ### Don't want autostart?
 
@@ -186,25 +186,9 @@ pager uninstall          # stops the service/LaunchAgent, removes the symlink + 
 rm -rf ~/.pager          # optional: final wipe of the repo + logs + .env
 ```
 
-**Windows:**
-```powershell
-pager uninstall          # stops Scheduled Task + running session, cleans $PROFILE block
-Remove-Item -Recurse -Force $env:USERPROFILE\.pager   # optional: final wipe
-```
+**Windows:** see [`windows/README.md#uninstall`](windows/README.md#uninstall) for the PowerShell flow + manual fallback.
 
 `pager uninstall` is **non-destructive** — it tears down system integration but never deletes your `.env` or the repo. Add `-y` to skip the confirmation prompt.
-
-<details>
-<summary>Manual Windows uninstall (if <code>pager uninstall</code> isn't available)</summary>
-
-```powershell
-Unregister-ScheduledTask -TaskName pager -Confirm:$false
-Get-Process | Where-Object { $_.Path -match 'claude' } | Stop-Process -Force
-# Strip the "# pager: auto-load" block from $PROFILE manually, then:
-Remove-Item -Recurse -Force $env:USERPROFILE\.pager
-```
-
-</details>
 
 <details>
 <summary>What the Linux bootstrap does, step by step</summary>
