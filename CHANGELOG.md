@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-05-19
+
+Hotfix — fresh installs were broken under macOS `/bin/sh`.
+
+### Fixed
+- **`curl … | sh` was failing with `sh: line 72: TARGET?: unbound variable`** on macOS. Root cause: macOS `/bin/sh` is bash 3.2 in POSIX mode, and it misparses the byte sequence `$TARGET…` (variable followed by U+2026 horizontal ellipsis, UTF-8 `E2 80 A6`) — under some locale/encoding paths the parser treats the trailing bytes as if the variable reference were `${TARGET?}` (the POSIX "error if unset" form), then trips `set -u`. Stripped all non-ASCII characters from `install.sh` (`—` → `--`, `…` → `...`, `─` → `-`, box-drawing → ASCII). Also scrubbed `macos/pager.app/Contents/MacOS/pager` for consistency, even though it's a defensive fix there (no expansion would have triggered the actual bug).
+- The fresh-install flow now works end-to-end on macOS Tahoe.
+
+### Notes
+- The audit only finds two `#!/bin/sh` files in the repo (`install.sh` and the .app launcher). Bash files (`bin/pager`, the bootstraps, `lib/sudo.sh`, etc.) are unaffected — bash full-mode parses UTF-8 bytes in variable contexts correctly; only bash-as-`sh` POSIX mode has the misparse.
+
 ## [0.5.1] — 2026-05-19
 
 Content + polish pass on top of 0.5.0 — sharper positioning, defensive .gitignore.
@@ -308,7 +319,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.2
 [0.5.1]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.1
 [0.5.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.0
 [0.4.1]: https://github.com/jawwadzafar/pager/releases/tag/v0.4.1

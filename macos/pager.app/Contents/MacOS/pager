@@ -1,5 +1,5 @@
 #!/bin/sh
-# pager.app launcher — thin shim that exec's the real pager binary.
+# pager.app launcher -- thin shim that exec's the real pager binary.
 #
 # Why this file exists:
 #   macOS Login Items shows a friendly "pager" name + icon next to the
