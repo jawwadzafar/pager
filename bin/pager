@@ -197,6 +197,13 @@ EOF
 cmd_attach() {
   require tmux
   local session="${1:-claude}"
+  if ! tmux has-session -t "$session" 2>/dev/null; then
+    echo "$(red ERROR): no tmux session named '$session'." >&2
+    echo "" >&2
+    echo "Start one with:    $(bold "pager start") $([ "$session" = claude ] || printf '%s ' "$session")" >&2
+    echo "Or list active:    $(bold "pager status")" >&2
+    return 1
+  fi
   exec tmux attach -t "$session"
 }
 
@@ -774,7 +781,10 @@ cmd_url() {
   require tmux
   url_for() {
     local s="$1"
-    tmux has-session -t "$s" 2>/dev/null || { printf '%-20s %s\n' "[$s]" "no session"; return; }
+    if ! tmux has-session -t "$s" 2>/dev/null; then
+      printf '%-20s %s\n' "[$s]" "no session  ($(dim "start with: pager start $([ "$s" = claude ] || printf '%s' "$s")"))"
+      return
+    fi
     local url
     url=$(tmux capture-pane -t "$s":0 -p -S - 2>/dev/null \
           | grep -oE 'https://claude\.ai/code/session_[A-Za-z0-9]+' \
@@ -786,6 +796,10 @@ cmd_url() {
     fi
   }
   if [ "${1-}" = "--all" ]; then
+    if ! tmux ls 2>/dev/null | grep -q .; then
+      echo "No tmux sessions running. Start one with: $(bold "pager start")"
+      return 1
+    fi
     tmux ls 2>/dev/null | awk -F: '{print $1}' | while read -r s; do url_for "$s"; done
   else
     url_for "${1:-claude}"
@@ -987,11 +1001,42 @@ cmd_run() {
 # one-line hint when something is wrong. Designed to be the first thing a
 # user runs when "it isn't working". Exit code: 0 if all pass, 1 if any fail.
 cmd_doctor() {
-  local fails=0 warns=0
+  local fails=0 warns=0 fixes=0
+  local fix_mode=0 yes_mode=0
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --fix)         fix_mode=1 ;;
+      -y|--yes)      yes_mode=1 ;;
+      -h|--help)
+        cat <<EOF
+$(bold "pager doctor") $(dim "[--fix [-y/--yes]]")
 
-  pass() { printf '  %s %s\n' "$(green ✓)" "$1"; }
-  warn() { printf '  %s %s\n'   "$(yellow !)" "$1"; [ -n "${2-}" ] && printf '      %s %s\n' "$(dim '↳')" "$2"; warns=$((warns+1)); }
-  fail() { printf '  %s %s\n'   "$(red ✗)" "$1";    [ -n "${2-}" ] && printf '      %s %s\n' "$(dim '↳')" "$2"; fails=$((fails+1)); }
+  Self-diagnostic. Walks deps, PATH, .env perms, trust flag, services,
+  watchdog freshness, sessions. Exit 0 if all pass, 1 if any fail.
+
+  $(bold "--fix")     attempt safe auto-fixes for any failing check:
+              - .env perms wrong       -> chmod 600
+              - trust flag missing     -> pager trust \$HOME
+              - autostart not loaded   -> launchctl bootstrap / systemctl start
+              - watchdog stalled       -> kickstart / restart timer
+              - no session running     -> pager start
+              Failures that need package installs (missing tmux, claude, etc.)
+              are NOT auto-fixed — print the install command and skip.
+              Anything with side effects (TCC prompts on Mac) requires -y.
+  $(bold "-y, --yes") confirm fixes with side effects (macOS TCC prompts, etc.)
+EOF
+        return 0
+        ;;
+      *) echo "Unknown option: $arg  (try: pager doctor --help)" >&2; return 1 ;;
+    esac
+  done
+
+  pass()  { printf '  %s %s\n' "$(green ✓)" "$1"; }
+  warn()  { printf '  %s %s\n' "$(yellow !)" "$1"; [ -n "${2-}" ] && printf '      %s %s\n' "$(dim '↳')" "$2"; warns=$((warns+1)); }
+  fail()  { printf '  %s %s\n' "$(red ✗)" "$1";   [ -n "${2-}" ] && printf '      %s %s\n' "$(dim '↳')" "$2"; fails=$((fails+1)); }
+  # fixed() — used when --fix successfully remediated something.
+  fixed() { printf '  %s %s %s\n' "$(green ✓)" "$1" "$(dim "[auto-fixed]")"; fixes=$((fixes+1)); }
 
   printf '%s\n\n' "$(bold "pager doctor") $(dim "— $__PAGER_ROOT")"
 
@@ -1029,11 +1074,18 @@ cmd_doctor() {
     mode="${mode:-?}"
     if [ "$mode" = "600" ]; then
       pass ".env perms 600"
+    elif [ "$fix_mode" -eq 1 ]; then
+      chmod 600 "$__PAGER_ROOT/.env"
+      fixed ".env perms now 600 (was $mode)"
     else
-      fail ".env perms are $mode (want 600)" "chmod 600 $__PAGER_ROOT/.env"
+      fail ".env perms are $mode (want 600)" "chmod 600 $__PAGER_ROOT/.env   (or: pager doctor --fix)"
     fi
+  elif [ "$fix_mode" -eq 1 ] && [ -f "$__PAGER_ROOT/.env.example" ]; then
+    cp "$__PAGER_ROOT/.env.example" "$__PAGER_ROOT/.env"
+    chmod 600 "$__PAGER_ROOT/.env"
+    fixed ".env created from template, chmod 600"
   else
-    warn ".env missing" "cp $__PAGER_ROOT/.env.example $__PAGER_ROOT/.env && chmod 600 $__PAGER_ROOT/.env"
+    warn ".env missing" "cp $__PAGER_ROOT/.env.example $__PAGER_ROOT/.env && chmod 600 $__PAGER_ROOT/.env   (or: pager doctor --fix)"
   fi
 
   # ── 4. claude.json trust flag ───────────────────────────────────────────
@@ -1051,12 +1103,30 @@ PY
 )"
     case "$trust" in
       true)  pass "\$HOME pre-trusted in ~/.claude.json (autostart safe)" ;;
-      false) fail "\$HOME not trusted in ~/.claude.json" "Re-run bootstrap.sh — step 5 fixes this" ;;
+      false)
+        if [ "$fix_mode" -eq 1 ]; then
+          if cmd_trust "$HOME" >/dev/null 2>&1; then
+            fixed "\$HOME now pre-trusted"
+          else
+            fail "\$HOME not trusted; auto-fix failed" "pager trust \$HOME"
+          fi
+        else
+          fail "\$HOME not trusted in ~/.claude.json" "pager trust \$HOME   (or: pager doctor --fix)"
+        fi
+        ;;
       *)     warn "couldn't read ~/.claude.json" "manual check: jq '.projects.\"'\$HOME'\"' ~/.claude.json" ;;
     esac
+  elif [ "$fix_mode" -eq 1 ]; then
+    if cmd_trust "$HOME" >/dev/null 2>&1; then
+      # shellcheck disable=SC2088  # tilde shown literally to user
+      fixed "~/.claude.json created + \$HOME pre-trusted"
+    else
+      warn "couldn't create ~/.claude.json — claude may not be installed yet" \
+           "Install: https://claude.com/code, then re-run"
+    fi
   else
     # shellcheck disable=SC2088  # ~/.claude.json shown literally to user
-    warn "~/.claude.json not found" "First-run claude will create it; bootstrap.sh pre-trusts \$HOME"
+    warn "~/.claude.json not found" "Install claude, then: pager trust \$HOME   (or: pager doctor --fix)"
   fi
 
   # ── 5. services (systemd on Linux, launchd on macOS) ────────────────────
@@ -1074,11 +1144,28 @@ PY
     if [ -f "$HOME/Library/LaunchAgents/com.pager.agent.plist" ]; then
       if launchctl print "gui/$uid/com.pager.agent" >/dev/null 2>&1; then
         pass "com.pager.agent: loaded"
+      elif [ "$fix_mode" -eq 1 ]; then
+        if launchctl bootstrap "gui/$uid" "$HOME/Library/LaunchAgents/com.pager.agent.plist" 2>/dev/null; then
+          fixed "com.pager.agent: now loaded"
+        else
+          fail "com.pager.agent: not loaded; auto-fix failed" "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.pager.agent.plist"
+        fi
       else
-        fail "com.pager.agent: not loaded" "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.pager.agent.plist"
+        fail "com.pager.agent: not loaded" "pager autostart enable   (or: pager doctor --fix)"
       fi
+    elif [ "$fix_mode" -eq 1 ] && [ "$yes_mode" -eq 1 ]; then
+      # Auto-enabling autostart on Mac triggers the TCC permission storm
+      # at next login — require explicit --yes to do this from --fix.
+      if pager autostart enable >/dev/null 2>&1; then
+        fixed "com.pager.agent installed + loaded (TCC prompts at next login)"
+      else
+        fail "autostart enable failed" "pager autostart enable"
+      fi
+    elif [ "$fix_mode" -eq 1 ]; then
+      warn "com.pager.agent not installed (autostart disabled)" \
+           "pager autostart enable   (or: pager doctor --fix --yes; note: triggers TCC prompts)"
     else
-      warn "com.pager.agent not installed" "re-run macos/bootstrap.sh"
+      warn "com.pager.agent not installed" "pager autostart enable   (or: pager doctor --fix --yes)"
     fi
     # LaunchAgents only run at login — no boot-time equivalent of linger.
     # We report this as informational rather than warn, because "fix it" is
@@ -1090,19 +1177,45 @@ PY
       svc_state="$(systemctl --user is-active pager.service 2>/dev/null || true)"
       case "$svc_state" in
         active) pass "pager.service: active" ;;
-        *)      fail "pager.service: $svc_state" "systemctl --user start pager.service" ;;
+        *)
+          if [ "$fix_mode" -eq 1 ]; then
+            if systemctl --user start pager.service 2>/dev/null; then
+              fixed "pager.service: now active (was $svc_state)"
+            else
+              fail "pager.service: $svc_state; auto-fix failed" "systemctl --user status pager.service"
+            fi
+          else
+            fail "pager.service: $svc_state" "systemctl --user start pager.service   (or: pager doctor --fix)"
+          fi
+          ;;
       esac
+    elif [ "$fix_mode" -eq 1 ]; then
+      if pager autostart enable >/dev/null 2>&1; then
+        fixed "pager.service installed + started"
+      else
+        warn "pager.service not installed; autostart enable failed" "pager autostart enable"
+      fi
     else
-      warn "pager.service not installed" "make service  (or re-run bootstrap.sh)"
+      warn "pager.service not installed" "pager autostart enable   (or: pager doctor --fix)"
     fi
     if systemctl --user list-unit-files pager-watch.timer 2>/dev/null | grep -q '^pager-watch.timer'; then
       timer_state="$(systemctl --user is-active pager-watch.timer 2>/dev/null || true)"
       case "$timer_state" in
         active) pass "pager-watch.timer: active" ;;
-        *)      warn "pager-watch.timer: $timer_state" "systemctl --user enable --now pager-watch.timer" ;;
+        *)
+          if [ "$fix_mode" -eq 1 ]; then
+            if systemctl --user enable --now pager-watch.timer >/dev/null 2>&1; then
+              fixed "pager-watch.timer: now active"
+            else
+              warn "pager-watch.timer: $timer_state; auto-fix failed" "systemctl --user enable --now pager-watch.timer"
+            fi
+          else
+            warn "pager-watch.timer: $timer_state" "systemctl --user enable --now pager-watch.timer   (or: pager doctor --fix)"
+          fi
+          ;;
       esac
     else
-      warn "pager-watch.timer not installed" "make watchdog  (or re-run bootstrap.sh)"
+      warn "pager-watch.timer not installed" "pager autostart enable   (or: pager doctor --fix)"
     fi
     if [ "$(loginctl show-user "$USER" -p Linger 2>/dev/null | cut -d= -f2)" = "yes" ]; then
       pass "linger enabled (services start at boot)"
@@ -1150,14 +1263,19 @@ PY
 
   # ── verdict ─────────────────────────────────────────────────────────────
   echo
+  if [ "$fix_mode" -eq 1 ] && [ "$fixes" -gt 0 ]; then
+    printf '%s auto-fixed: %d\n' "$(green '✓')" "$fixes"
+  fi
   if [ "$fails" -eq 0 ] && [ "$warns" -eq 0 ]; then
     printf '%s\n' "$(green '✓ all checks passed')"
     return 0
   elif [ "$fails" -eq 0 ]; then
     printf '%s warnings: %d (non-fatal)\n' "$(yellow '!')" "$warns"
+    [ "$fix_mode" -eq 0 ] && printf '%s\n' "$(dim 'Try: pager doctor --fix')"
     return 0
   else
     printf '%s failures: %d   warnings: %d\n' "$(red '✗')" "$fails" "$warns"
+    [ "$fix_mode" -eq 0 ] && printf '%s\n' "$(dim 'Try: pager doctor --fix  (use -y to allow side-effects like enabling autostart)')"
     return 1
   fi
 }
