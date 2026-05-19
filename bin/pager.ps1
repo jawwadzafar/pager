@@ -187,9 +187,8 @@ function Invoke-PagerStart {
     }
 
     if (-not (Test-Path $PagerLogsDir)) { New-Item -ItemType Directory -Force -Path $PagerLogsDir | Out-Null }
-    $logPath = Join-Path $PagerLogsDir "$Session.log"
-    $errPath = Join-Path $PagerLogsDir "$Session.err"
     $pidPath = Join-Path $PagerLogsDir "$Session.pid"
+    $urlCachePath = Join-Path $PagerLogsDir "$Session.url"
 
     # Build claude argv.
     $claudeArgs = New-Object System.Collections.Generic.List[string]
@@ -201,14 +200,17 @@ function Invoke-PagerStart {
         $claudeArgs.Add($Session)
     }
 
+    # CRITICAL: do NOT use -RedirectStandardOutput / -RedirectStandardError here.
+    # Redirection strips claude's TTY, and claude then bails with "Input must be
+    # provided ... --print". Instead we let claude have a hidden console window
+    # (real TTY, no UI), and scrape the URL out of the console screen buffer
+    # in Invoke-PagerUrl via AttachConsole + ReadConsoleOutputCharacter.
     $startArgs = @{
-        FilePath               = "claude"
-        ArgumentList           = $claudeArgs.ToArray()
-        WorkingDirectory       = $Cwd
-        RedirectStandardOutput = $logPath
-        RedirectStandardError  = $errPath
-        WindowStyle            = "Hidden"
-        PassThru               = $true
+        FilePath          = "claude"
+        ArgumentList      = $claudeArgs.ToArray()
+        WorkingDirectory  = $Cwd
+        WindowStyle       = "Hidden"
+        PassThru          = $true
     }
     $proc = Start-Process @startArgs
     if (-not $proc) {
@@ -216,42 +218,26 @@ function Invoke-PagerStart {
         exit 1
     }
     $proc.Id | Out-File -FilePath $pidPath -Encoding ascii -Force
+    # Clear any old URL cache from a previous run.
+    Remove-Item -Path $urlCachePath -ErrorAction SilentlyContinue
 
-    # Sanity check: claude often dies within 2s on Windows because Start-Process
-    # doesn't give it a TTY and our stdout/stderr redirection makes claude
-    # think it's in pipe/--print mode. Surface that immediately instead of
-    # leaving a stale PID file for the user to discover via 'pager status'.
+    # Sanity check: still alive after a couple seconds? (claude could fail to
+    # find an auth token, hit a version mismatch, etc. -- those errors die fast.)
     Start-Sleep -Milliseconds 2500
     $alive = $true
     try { Get-Process -Id $proc.Id -ErrorAction Stop | Out-Null } catch { $alive = $false }
-
     if (-not $alive) {
         Write-Host ""
         Write-Host "WARNING: claude exited within 2.5 seconds." -ForegroundColor Yellow
-        $errContent = ""
-        if (Test-Path $errPath) {
-            try { $errContent = (Get-Content -Path $errPath -Raw -ErrorAction SilentlyContinue) } catch {}
-        }
-        if ($errContent) {
-            Write-Host ""
-            Write-Host "--- claude stderr ($errPath) ---" -ForegroundColor DarkGray
-            Write-Host $errContent.TrimEnd() -ForegroundColor DarkGray
-            Write-Host "--------------------------------" -ForegroundColor DarkGray
-            Write-Host ""
-        }
-        if ($errContent -match "Input must be provided" -or $errContent -match "--print") {
-            Write-Host "This is a known v0.7.0-alpha Windows limitation:" -ForegroundColor Yellow
-            Write-Host "  claude detects no TTY and switches to --print mode, then bails because"
-            Write-Host "  no piped input is available. pager doesn't yet ship a Windows ConPTY"
-            Write-Host "  shim to give claude a real terminal in the background."
-            Write-Host ""
-            Write-Host "Workarounds:" -ForegroundColor Yellow
-            Write-Host "  1. Use WSL2 + the Linux installer (full PTY via tmux) -- this works today"
-            Write-Host "  2. Run claude in a visible terminal yourself; pager will track it later"
-            Write-Host "  3. Watch issue tracker for v0.8 (ConPTY-backed Windows sessions)"
-            Write-Host ""
-            Write-Host "Details: windows/README.md#known-limitations"
-        }
+        Write-Host "  Most common causes:"
+        Write-Host "    * claude not authenticated -- run 'claude' once interactively to log in"
+        Write-Host "    * claude version doesn't support --remote-control"
+        Write-Host "    * --dangerously-skip-permissions rejected"
+        Write-Host ""
+        Write-Host "  Verify directly (in a normal PowerShell window):"
+        Write-Host "    claude --version"
+        Write-Host "    claude --dangerously-skip-permissions --remote-control claude"
+        Write-Host ""
         Remove-Item -Path $pidPath -ErrorAction SilentlyContinue
         exit 1
     }
@@ -259,9 +245,10 @@ function Invoke-PagerStart {
     Write-Host "Started session '$Session'."
     Write-Host "  PID:    $($proc.Id)"
     Write-Host "  cwd:    $Cwd  (pre-trusted)"
-    Write-Host "  Log:    $logPath"
-    Write-Host "  Tail:   pager logs $Session"
-    Write-Host "  URL:    pager url $Session"
+    Write-Host "  State:  running in hidden console (real TTY, no visible window)"
+    Write-Host ""
+    Write-Host "  Phone URL:   pager url $Session     (scrapes claude's console buffer)"
+    Write-Host "  Stop:        pager stop $Session"
 }
 
 function Invoke-PagerStop {
@@ -282,8 +269,9 @@ function Invoke-PagerStop {
                 Write-Host "  Couldn't kill PID $($p.PID): $_"
             }
         }
-        # Remove stale PID file in either case.
+        # Remove PID and URL-cache files in either case.
         Remove-Item -Path "$PagerLogsDir\$($p.Session).pid" -ErrorAction SilentlyContinue
+        Remove-Item -Path "$PagerLogsDir\$($p.Session).url" -ErrorAction SilentlyContinue
     }
     if ($stopped -eq 0) {
         Write-Host "Session '$Session' was already dead. PID file cleaned up."
@@ -314,50 +302,157 @@ function Invoke-PagerStatus {
 
 function Invoke-PagerUrl {
     param([string]$Session = "claude")
-    $logPath = Join-Path $PagerLogsDir "$Session.log"
-    if (-not (Test-Path $logPath)) {
-        Write-Host "[$Session] no log: $logPath  (start with: pager start $Session)"
+    $urlCachePath = Join-Path $PagerLogsDir "$Session.url"
+
+    # Fast path: we've successfully scraped this session's URL before. Cached
+    # URLs survive subsequent calls even if claude has scrolled the URL line
+    # off the visible screen buffer.
+    if (Test-Path $urlCachePath) {
+        $cached = (Get-Content -Path $urlCachePath -Raw -ErrorAction SilentlyContinue).Trim()
+        if ($cached -match "^https://claude\.ai/code/session_") {
+            Write-Host ("{0,-20} {1}" -f "[$Session]", $cached)
+            return
+        }
+    }
+
+    # Otherwise, find the live session and scrape its hidden console buffer.
+    $procs = Get-PagerProcesses | Where-Object { $_.Session -eq $Session -and $_.Alive }
+    if (-not $procs) {
+        Write-Host ("{0,-20} {1}" -f "[$Session]", "no session running. Start with: pager start $Session")
         return
     }
-    $match = Select-String -Path $logPath -Pattern 'https://claude\.ai/code/session_[A-Za-z0-9]+' -ErrorAction SilentlyContinue | Select-Object -Last 1
-    if ($match) {
-        Write-Host ("{0,-20} {1}" -f "[$Session]", $match.Matches.Value)
+    $targetPid = $procs[0].PID
+
+    $url = Read-UrlFromConsole -TargetPid $targetPid
+    if ($url) {
+        $url | Out-File -FilePath $urlCachePath -Encoding ascii -Force
+        Write-Host ("{0,-20} {1}" -f "[$Session]", $url)
     } else {
-        Write-Host ("{0,-20} {1}" -f "[$Session]", "(no Remote Control URL yet -- check 'pager logs $Session')")
+        Write-Host ("{0,-20} {1}" -f "[$Session]", "(URL not visible in claude's console buffer yet)")
+        Write-Host "  Try again in a few seconds -- claude prints the URL within ~5s of startup."
+        Write-Host "  If it never appears, claude may have scrolled past it. Restart: pager restart $Session"
     }
+}
+
+# Read claude's hidden console screen buffer via Win32 APIs to find the
+# Remote Control URL. Runs in a SIDECAR pwsh process because AttachConsole
+# requires the calling process to not already have a console (pwsh does).
+function Read-UrlFromConsole {
+    param([int]$TargetPid)
+
+    # The sidecar script: FreeConsole -> AttachConsole(target) -> read whole
+    # screen buffer -> regex for URL -> print -> exit.
+    $sidecar = @'
+param([int]$TargetPid)
+$ErrorActionPreference = "Continue"
+Add-Type -Namespace PagerWin -Name Native -MemberDefinition @"
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern bool FreeConsole();
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern bool AttachConsole(uint dwProcessId);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern System.IntPtr GetStdHandle(int nStdHandle);
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+public struct COORD { public short X; public short Y; }
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+public struct SMALL_RECT { public short Left; public short Top; public short Right; public short Bottom; }
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+public struct CSBI {
+    public COORD dwSize;
+    public COORD dwCursorPosition;
+    public short wAttributes;
+    public SMALL_RECT srWindow;
+    public COORD dwMaximumWindowSize;
+}
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern bool GetConsoleScreenBufferInfo(System.IntPtr hConsoleOutput, out CSBI lpConsoleScreenBufferInfo);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern bool ReadConsoleOutputCharacter(System.IntPtr hConsoleOutput, System.Text.StringBuilder lpCharacter, uint nLength, COORD dwReadCoord, out uint lpNumberOfCharsRead);
+"@
+[void][PagerWin.Native]::FreeConsole()
+if (-not [PagerWin.Native]::AttachConsole([uint32]$TargetPid)) {
+    [Console]::Error.WriteLine("AttachConsole failed for pid $TargetPid (err " + [System.Runtime.InteropServices.Marshal]::GetLastWin32Error() + ")")
+    exit 2
+}
+$STD_OUTPUT_HANDLE = -11
+$h = [PagerWin.Native]::GetStdHandle($STD_OUTPUT_HANDLE)
+$info = New-Object PagerWin.Native+CSBI
+if (-not [PagerWin.Native]::GetConsoleScreenBufferInfo($h, [ref]$info)) {
+    [Console]::Error.WriteLine("GetConsoleScreenBufferInfo failed")
+    exit 3
+}
+$width  = [int]$info.dwSize.X
+$height = [int]$info.dwSize.Y
+if ($width -le 0 -or $height -le 0) {
+    [Console]::Error.WriteLine("Bad buffer size: ${width}x${height}")
+    exit 4
+}
+$all = New-Object System.Text.StringBuilder ($width * $height + $height)
+$buf = New-Object System.Text.StringBuilder $width
+for ($y = 0; $y -lt $height; $y++) {
+    $coord = New-Object PagerWin.Native+COORD
+    $coord.X = 0
+    $coord.Y = [short]$y
+    $read = [uint32]0
+    [void][PagerWin.Native]::ReadConsoleOutputCharacter($h, $buf, [uint32]$width, $coord, [ref]$read)
+    [void]$all.AppendLine($buf.ToString(0, [int]$read).TrimEnd())
+    [void]$buf.Clear()
+}
+[void][PagerWin.Native]::FreeConsole()
+$text = $all.ToString()
+$m = [regex]::Match($text, "https://claude\.ai/code/session_[A-Za-z0-9]+")
+if ($m.Success) {
+    Write-Output $m.Value
+    exit 0
+}
+exit 1
+'@
+
+    # Write the sidecar to a temp .ps1 and invoke whichever PowerShell host
+    # is available. powershell.exe (5.1) is always present on Win10+.
+    $tempPs1 = [System.IO.Path]::GetTempFileName()
+    $tempPs1Final = $tempPs1 + ".ps1"
+    Move-Item -Path $tempPs1 -Destination $tempPs1Final -Force
+    Set-Content -Path $tempPs1Final -Value $sidecar -Encoding ASCII
+
+    $hostExe = $null
+    $cmd = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($cmd) { $hostExe = $cmd.Source }
+    if (-not $hostExe) {
+        $cmd = Get-Command powershell -ErrorAction SilentlyContinue
+        if ($cmd) { $hostExe = $cmd.Source }
+    }
+    if (-not $hostExe) {
+        Remove-Item -Path $tempPs1Final -ErrorAction SilentlyContinue
+        return $null
+    }
+
+    try {
+        $captured = & $hostExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $tempPs1Final -TargetPid $TargetPid 2>$null
+        if ($LASTEXITCODE -eq 0 -and $captured) {
+            return ($captured | Select-Object -First 1).Trim()
+        }
+    } catch {
+        # fall through to return $null
+    } finally {
+        Remove-Item -Path $tempPs1Final -ErrorAction SilentlyContinue
+    }
+    return $null
 }
 
 function Invoke-PagerLogs {
     param([string]$Session = "claude")
-    $logPath = Join-Path $PagerLogsDir "$Session.log"
-    $errPath = Join-Path $PagerLogsDir "$Session.err"
-    $haveLog = Test-Path $logPath
-    $haveErr = Test-Path $errPath
-    if (-not $haveLog -and -not $haveErr) {
-        Write-Host "No log files for session '$Session' at $PagerLogsDir" -ForegroundColor Yellow
-        Write-Host "Start a session: pager start $Session"
-        exit 1
-    }
-
-    # If stderr has content, show it first -- it's almost always the reason
-    # claude isn't producing the expected stdout.
-    if ($haveErr) {
-        try { $errSize = (Get-Item $errPath -ErrorAction Stop).Length } catch { $errSize = 0 }
-        if ($errSize -gt 0) {
-            Write-Host "--- stderr: $errPath ---" -ForegroundColor Yellow
-            Get-Content -Path $errPath
-            Write-Host "--- end stderr ---" -ForegroundColor Yellow
-            Write-Host ""
-        }
-    }
-
-    if ($haveLog) {
-        Write-Host "Tailing $logPath  (Ctrl-C to detach; the session keeps running)" -ForegroundColor DarkGray
-        Write-Host ""
-        Get-Content -Path $logPath -Tail 50 -Wait
-    } else {
-        Write-Host "(no stdout log yet -- $logPath)" -ForegroundColor DarkGray
-    }
+    Write-Host "Windows-native v0.7.0-alpha doesn't capture session output to a file." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Why: claude needs a real TTY to run interactively; redirecting stdout/stderr"
+    Write-Host "to a file strips the TTY and makes claude bail to --print mode. So claude runs"
+    Write-Host "in a hidden console with no log capture in this alpha."
+    Write-Host ""
+    Write-Host "What you can do instead:"
+    Write-Host "  pager url $Session     scrape just the claude.ai/code URL from the console"
+    Write-Host "  pager status           is the session alive?"
+    Write-Host ""
+    Write-Host "For full log tailing, install WSL2 + the Linux installer (tmux-backed)."
 }
 
 function Invoke-PagerTrust {
