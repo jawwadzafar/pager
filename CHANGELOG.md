@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] — 2026-05-19
+
+Real-Mac test of v0.5.0 showed that despite the `lsregister -f` of `$PAGER_ROOT/macos/pager.app`, the Login Items row still rendered the generic exec icon + "Item from unidentified developer" — even after `bootout` + `bootstrap`. Two root causes:
+
+1. **macOS BTM caches Login Items metadata keyed by the LaunchAgent's label.** Even though `bootout` removed the runtime entry, the BTM record (which holds the rendered name + icon resolution) wasn't re-evaluated against the new ProgramArguments path.
+2. **LaunchServices doesn't reliably scan `~/.pager/macos/`** (a hidden directory, non-standard location). `lsregister -f` worked at the moment we ran it, but BTM's metadata cache wasn't refreshed from the new registration.
+
+### Fixed
+- **Bootstrap step 10c now symlinks `~/Applications/pager.app → $PAGER_ROOT/macos/pager.app`** (creates `~/Applications/` if missing). The LaunchAgent plist's `ProgramArguments` is re-rendered at install time to point at the symlink path rather than the hidden `~/.pager` path. Two wins:
+  1. `~/Applications` is a standard LaunchServices scan location — bundle metadata is indexed reliably.
+  2. BTM keys its Login Items entry against the visible symlink path, so the next time `bootout` + `bootstrap` runs, BTM creates a fresh entry that reads the bundle's `Info.plist` + `AppIcon.icns`.
+- Bundle version in `Contents/Info.plist` bumped to `0.5.3` to invalidate any cached metadata.
+- `pager uninstall` now removes the `~/Applications/pager.app` symlink too.
+- `macos/README.md` recovery table gained a "Login Items shows the wrong icon" row with the `sfltool resetbtm` fix path.
+
+### Notes
+- Existing v0.5.0-0.5.2 installs need a one-time `sfltool resetbtm` to clear the cached metadata, then `cd ~/.pager && git pull && ./macos/bootstrap.sh`. The reset is necessary because the BTM entry was created before the `.app` bundle existed in the repo; bootout alone doesn't refresh it.
+- Fresh installs from `curl | sh` on v0.5.3+ get the right icon + name from the first bootstrap.
+
 ## [0.5.2] — 2026-05-19
 
 Hotfix — fresh installs were broken under macOS `/bin/sh`.
@@ -319,7 +338,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.3
 [0.5.2]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.2
 [0.5.1]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.1
 [0.5.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.0

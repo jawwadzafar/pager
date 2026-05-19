@@ -94,6 +94,7 @@ Mental model: **start** = up. **stop** = down and stays down. **kill** = down, w
 | Xcode CLT install | `brew: command not found`, or step 1 of bootstrap warns Homebrew didn't install | Run `xcode-select --install` manually, then re-run `./macos/bootstrap.sh`. |
 | Mac password to Homebrew | Bootstrap exits at step 1 | Re-run `./macos/bootstrap.sh` — type the password this time. |
 | Background Items toggle (turned `pager` off) | `pager doctor` reports `com.pager.agent: not loaded`; tmux session disappears at next login | System Settings → General → Login Items & Extensions → scroll to **Allow in the Background** → toggle `pager` back on. Or just re-run `./macos/bootstrap.sh` (idempotent — it does `bootout` + `bootstrap` which re-registers cleanly). |
+| Login Items row shows the generic exec icon + "Item from unidentified developer" instead of the pager icon | macOS BTM cached the old metadata from before the `.app` bundle existed (pre-0.5.3) | `sfltool resetbtm` clears the BTM database, then re-run `./macos/bootstrap.sh`. v0.5.3+ installs symlink `~/Applications/pager.app → $PAGER_ROOT/macos/pager.app` so LaunchServices can index the bundle properly. |
 | Network access to claude (Little Snitch / Lulu users) | Claude can't reach claude.ai; no Remote Control URL appears | Allow `claude` outbound to `*.claude.ai` and `*.anthropic.com` in your firewall app. |
 
 Pager itself never asks for Full Disk Access, Accessibility, Screen Recording, or any other TCC permission — none of its features need them. If you see a prompt naming one of those, something else on your Mac is asking (it's almost certainly not pager). Deny and report.
@@ -150,6 +151,7 @@ tail -F ~/pager/logs/launchd-agent.out ~/pager/logs/launchd-agent.err
 ```bash
 launchctl bootout gui/$(id -u)/com.pager.agent
 rm ~/Library/LaunchAgents/com.pager.agent.plist
+rm ~/Applications/pager.app    # symlink → $PAGER_ROOT/macos/pager.app
 rm ~/.local/bin/pager
 ```
 

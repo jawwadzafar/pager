@@ -258,20 +258,57 @@ render_plist \
   "$HOME/Library/LaunchAgents/com.pager.agent.plist"
 ok "Rendered com.pager.agent.plist"
 
-# 10c. Register the pager.app bundle with LaunchServices so the Login
-# Items row picks up its Info.plist name + AppIcon.icns. The bundle
-# lives in $PAGER_ROOT/macos/pager.app, outside /Applications, so
-# auto-discovery isn't guaranteed — lsregister -f forces it.
+# 10c. Symlink pager.app into ~/Applications so LaunchServices picks up
+# its Info.plist name + AppIcon.icns for the Login Items row. The actual
+# bundle lives in $PAGER_ROOT/macos/pager.app (hidden dir on disk), which
+# LaunchServices does NOT auto-scan reliably. ~/Applications is a
+# standard location it always scans.
+#
+# We update the LaunchAgent plist's ProgramArguments to point at the
+# symlink path rather than the .pager-internal path, so BTM keys its
+# Login Items entry against the symlink (which lives at a path
+# LaunchServices can index). Symlink target == the canonical .app.
+APPS_DIR="$HOME/Applications"
+mkdir -p "$APPS_DIR"
+APP_LINK="$APPS_DIR/pager.app"
+if [ -L "$APP_LINK" ] || [ -e "$APP_LINK" ]; then
+  rm -f "$APP_LINK"
+fi
+ln -s "$__PAGER_ROOT/macos/pager.app" "$APP_LINK"
+ok "Symlinked $APP_LINK -> $__PAGER_ROOT/macos/pager.app"
+
+# Re-render the plist to point ProgramArguments at the symlinked path.
+# This keys the BTM Login Items entry against ~/Applications/pager.app
+# rather than the hidden ~/.pager path — LaunchServices indexes the
+# former, can find the Info.plist + .icns, and shows a real icon + name.
+sed \
+  -e "s|__PAGER_ROOT__|$__PAGER_ROOT|g" \
+  -e "s|__USER_HOME__|$HOME|g" \
+  -e "s|__BREW_BIN__|$BREW_PREFIX/bin|g" \
+  -e "s|$__PAGER_ROOT/macos/pager.app|$APP_LINK|g" \
+  "$__PAGER_ROOT/macos/launchd/com.pager.agent.plist.template" \
+  > "$HOME/Library/LaunchAgents/com.pager.agent.plist"
+chmod 644 "$HOME/Library/LaunchAgents/com.pager.agent.plist"
+
 lsregister="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
-if [ -x "$lsregister" ] && [ -d "$__PAGER_ROOT/macos/pager.app" ]; then
-  "$lsregister" -f "$__PAGER_ROOT/macos/pager.app" 2>/dev/null || true
-  ok "Registered pager.app with LaunchServices"
+if [ -x "$lsregister" ]; then
+  "$lsregister" -f "$APP_LINK" 2>/dev/null || true
+  ok "Registered $APP_LINK with LaunchServices"
 fi
 
 # 10d. Reload (bootout if loaded, then bootstrap). Modern launchctl 2 syntax.
+# The bootout drops the stale BTM Login Items entry that pointed at the
+# previous ProgramArguments path; bootstrap creates a fresh entry keyed
+# at ~/Applications/pager.app so the icon + name render.
 launchctl bootout "gui/$USER_UID/com.pager.agent" 2>/dev/null || true
 launchctl bootstrap "gui/$USER_UID" "$HOME/Library/LaunchAgents/com.pager.agent.plist"
 ok "com.pager.agent loaded"
+
+# If the Login Items panel STILL shows the old generic icon after this
+# (because BTM caches stale metadata for a label even across bootouts),
+# the user can run `sfltool resetbtm` once to wipe the BTM database,
+# then re-run this bootstrap. We don't run it automatically because it
+# affects ALL Login Items, not just pager.
 
 # Brief settle before verify (first tick of the watchdog spawns the session).
 sleep 3
