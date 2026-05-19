@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.5] — 2026-05-19
+
+Multi-path trust + `PAGER_TRUST_PATHS` env var for reproducible bulk trust.
+
+### Why
+Real-Mac probe of `~/.claude.json` confirmed Claude Code's trust is **per-exact-path, not hierarchical**: trusting `$HOME` does NOT cover `$HOME/code/myproj`. v0.6.4 added `pager trust` but only one path at a time, and there was no way to declare a fixed list of paths to trust at install time.
+
+### Added
+- **`pager trust PATH1 PATH2 PATH3 ...`** — `cmd_trust` now accepts any number of paths (was: one). All three modes (`set`, `--check`, `--reset`) operate on the full list and report per-path results. Exit code 0 if all paths satisfy the mode, 1 if any fail.
+- **`PAGER_TRUST_PATHS` env var** read by both bootstraps (`macos/bootstrap.sh` step 9b, `linux/bootstrap.sh` step 6b). Colon-separated, like `PATH`. Each entry is passed to `pager trust`. Sourced from `~/.pager/.env` so a user can declare their trusted dirs once and re-bootstrap to apply.
+- `.env.example` documents `PAGER_TRUST_PATHS` with a commented-out example.
+- Smoke test 9c gains a multi-path round-trip: trust two paths in one call, reset both, verify both are no longer trusted. 25/25 tests pass.
+
+### Auto-trust answer (for the question "can we just auto-trust?")
+- **`$HOME`** is auto-trusted on every bootstrap (since v0.1.0; unchanged).
+- **Any path in `PAGER_TRUST_PATHS`** is auto-trusted on every bootstrap (new).
+- **No auto-detection of "common" dirs** (~/code, ~/projects, etc.) — that would pollute `~/.claude.json` with entries for dirs users may not have. Opting in via the env var is honest about what's being trusted.
+- **No interactive prompt** because `curl | sh` has no stdin tty. The env var route works in both interactive and non-interactive install flows.
+
 ## [0.6.4] — 2026-05-19
 
 `pager trust` subcommand — exposes the trust-flag write the bootstraps have always done internally, but as a first-class user-facing command.
@@ -521,7 +540,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.4...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.5...HEAD
+[0.6.5]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.5
 [0.6.4]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.4
 [0.6.3]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.3
 [0.6.2]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.2

@@ -206,98 +206,117 @@ _watchdog_enable() {
 #
 # Writes to ~/.claude.json's projects.<absolute-path> entry. Idempotent.
 cmd_trust() {
-  local target_path="$HOME"
   local mode="set"
+  local paths=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --check) mode="check" ;;
       --reset) mode="reset" ;;
       -h|--help)
         cat <<EOF
-$(bold "pager trust") $(dim "[--check | --reset] [PATH]")
+$(bold "pager trust") $(dim "[--check | --reset] [PATH ...]")
 
-  Pre-accept Claude Code's "Trust this folder?" dialog for a directory by
-  writing hasTrustDialogAccepted + hasCompletedProjectOnboarding under
-  projects.<PATH> in ~/.claude.json. Without it, autostart sessions hang
-  on the dialog forever (no human at keyboard).
+  Pre-accept Claude Code's "Trust this folder?" dialog for one or more
+  directories by writing hasTrustDialogAccepted + hasCompletedProject-
+  Onboarding under projects.<PATH> in ~/.claude.json. Without trust,
+  autostart sessions hang on the dialog forever (no human at keyboard).
 
-  PATH defaults to \$HOME. Bootstrap already trusts \$HOME — this command is
-  for adding other paths, verifying, or resetting for testing.
+  PATH defaults to \$HOME if no paths are given. Claude's trust is per-
+  exact-path, NOT hierarchical: trusting \$HOME does not cover subdirs.
 
-  --check    show current trust state for PATH, no changes (exit 0 if trusted)
-  --reset    remove the trust entry for PATH
+  --check    report state for each PATH, no writes (exit 0 if all trusted)
+  --reset    remove the trust entry for each PATH
 
 Examples:
-  pager trust                           # ensure \$HOME is trusted (default)
-  pager trust ~/code/secrets-project    # also trust this specific dir
-  pager trust --check ~/code/myproj     # report state, no write
-  pager trust --reset ~/code/myproj     # for testing — remove the entry
+  pager trust                                   # trust \$HOME (default)
+  pager trust ~/code ~/projects ~/src           # trust multiple dirs at once
+  pager trust --check ~/code/myproj             # report state
+  pager trust --reset ~/old-experiment          # remove entry
+
+Bulk-trust via env var (read by bootstrap from ~/.pager/.env):
+  PAGER_TRUST_PATHS="\$HOME/code:\$HOME/projects:\$HOME/src"
 EOF
         return 0
         ;;
       -*) echo "$(red "Unknown option:") $1  (try: pager trust --help)" >&2; return 1 ;;
-      *) target_path="$1" ;;
+      *) paths+=("$1") ;;
     esac
     shift
   done
 
-  # Normalize to absolute path. If the dir exists we can `cd` into it; if
-  # not (rare — user pre-trusting a path they'll create later), we still
-  # write the entry, just without canonicalization.
-  if [ -d "$target_path" ]; then
-    target_path="$(cd "$target_path" && pwd)"
+  # Default to $HOME when no PATH arguments given.
+  if [ "${#paths[@]}" -eq 0 ]; then
+    paths=("$HOME")
   fi
 
-  python3 - "$target_path" "$mode" <<'PYEOF'
+  # Normalize each path to absolute. If the dir exists, canonicalize via cd;
+  # if not (rare — user pre-trusting a path they'll create later), use as-is.
+  local normalized=()
+  local p
+  for p in "${paths[@]}"; do
+    if [ -d "$p" ]; then
+      normalized+=("$(cd "$p" && pwd)")
+    else
+      normalized+=("$p")
+    fi
+  done
+
+  python3 - "$mode" "${normalized[@]}" <<'PYEOF'
 import json, os, sys
-target = sys.argv[1]
-mode = sys.argv[2]
+mode = sys.argv[1]
+targets = sys.argv[2:]
 p = os.path.expanduser('~/.claude.json')
 d = {}
 if os.path.exists(p):
     try:
         with open(p) as f: d = json.load(f)
     except json.JSONDecodeError:
-        print(f"ERROR: ~/.claude.json is not valid JSON. Move it aside and re-run.", file=sys.stderr)
+        print("ERROR: ~/.claude.json is not valid JSON. Move it aside and re-run.", file=sys.stderr)
         sys.exit(2)
 
 projects = d.setdefault('projects', {})
-existing = projects.get(target, {})
-trusted = bool(existing.get('hasTrustDialogAccepted'))
-onboarded = bool(existing.get('hasCompletedProjectOnboarding'))
+any_failed = False
+dirty = False
 
-if mode == 'check':
-    if trusted and onboarded:
-        print(f'TRUSTED:     {target}')
-        sys.exit(0)
-    elif trusted:
-        print(f'PARTIAL:     {target}  (trust set, onboarding not)')
-        sys.exit(1)
-    else:
-        print(f'NOT TRUSTED: {target}')
-        sys.exit(1)
+for target in targets:
+    existing = projects.get(target, {})
+    trusted = bool(existing.get('hasTrustDialogAccepted'))
+    onboarded = bool(existing.get('hasCompletedProjectOnboarding'))
 
-if mode == 'reset':
-    if target in projects:
-        del projects[target]
-        with open(p, 'w') as f: json.dump(d, f, indent=2)
-        os.chmod(p, 0o600)
-        print(f'RESET:       {target}  (entry removed)')
-    else:
-        print(f'NOOP:        {target}  (no entry to remove)')
-    sys.exit(0)
+    if mode == 'check':
+        if trusted and onboarded:
+            print(f'TRUSTED:     {target}')
+        elif trusted:
+            print(f'PARTIAL:     {target}  (trust set, onboarding not)')
+            any_failed = True
+        else:
+            print(f'NOT TRUSTED: {target}')
+            any_failed = True
 
-# mode == 'set'
-proj = dict(existing)
-proj['hasTrustDialogAccepted'] = True
-proj['hasCompletedProjectOnboarding'] = True
-projects[target] = proj
-with open(p, 'w') as f: json.dump(d, f, indent=2)
-os.chmod(p, 0o600)
-if trusted and onboarded:
-    print(f'ALREADY:     {target}')
-else:
-    print(f'TRUSTED:     {target}')
+    elif mode == 'reset':
+        if target in projects:
+            del projects[target]
+            dirty = True
+            print(f'RESET:       {target}  (entry removed)')
+        else:
+            print(f'NOOP:        {target}  (no entry to remove)')
+
+    else:  # set
+        if trusted and onboarded:
+            print(f'ALREADY:     {target}')
+        else:
+            proj = dict(existing)
+            proj['hasTrustDialogAccepted'] = True
+            proj['hasCompletedProjectOnboarding'] = True
+            projects[target] = proj
+            dirty = True
+            print(f'TRUSTED:     {target}')
+
+if dirty:
+    with open(p, 'w') as f: json.dump(d, f, indent=2)
+    os.chmod(p, 0o600)
+
+sys.exit(1 if any_failed else 0)
 PYEOF
 }
 

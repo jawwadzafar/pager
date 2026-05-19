@@ -257,6 +257,24 @@ else
   fi
 fi
 
+# 9b. Trust extra paths from PAGER_TRUST_PATHS (colon-separated, additive
+# to $HOME). Read from .env earlier when the script sourced it via the
+# usual pager-binary entry path. Bootstrap reads it directly here too.
+if [ -n "${PAGER_TRUST_PATHS:-}" ]; then
+  log "9b/11 trust extra paths"
+  # Split on ':' the same way PATH does.
+  _IFS_SAVE="${IFS-}"
+  IFS=:
+  # shellcheck disable=SC2086  # intentional word-split on the env var
+  set -- $PAGER_TRUST_PATHS
+  IFS="$_IFS_SAVE"
+  if [ -x "$__PAGER_ROOT/bin/pager" ]; then
+    "$__PAGER_ROOT/bin/pager" trust "$@" 2>&1 | sed 's/^/    /' || warn "some PAGER_TRUST_PATHS entries failed"
+  else
+    warn "bin/pager not yet executable — skipped extra-path trust. Run \`pager trust\` after install."
+  fi
+fi
+
 # 10. AUTOSTART (on by default; --no-autostart to skip) ----------------------
 # Pager's whole pitch is "Claude Code that never sleeps" — autostart is
 # how that works. So by default we register the LaunchAgent here. Users

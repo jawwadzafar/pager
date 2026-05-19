@@ -214,6 +214,21 @@ trust_check 'TRUSTED:'      /tmp        || trust_pass=0
 trust_check 'TRUSTED:'      --check /tmp || trust_pass=0
 trust_check 'RESET:'        --reset /tmp || trust_pass=0
 trust_check 'NOT TRUSTED:'  --check /tmp || trust_pass=0
+# Multi-path: trust /tmp /var, then reset both, then confirm neither is trusted.
+trust_multi_check() {
+  local expected_count="$1" expected_prefix="$2"; shift 2
+  local got
+  got=$(env HOME="$TRUST_HOME" "$PAGER" trust "$@" 2>&1 || true)
+  local actual_count
+  actual_count=$(printf '%s\n' "$got" | grep -c "^${expected_prefix}" || true)
+  [ "$actual_count" -eq "$expected_count" ] && return 0
+  echo "    (got $actual_count lines starting '$expected_prefix', expected $expected_count)" >&2
+  echo "    (full output: $got)" >&2
+  return 1
+}
+trust_multi_check 2 'TRUSTED:'      /tmp /var           || trust_pass=0
+trust_multi_check 2 'RESET:'        --reset /tmp /var   || trust_pass=0
+trust_multi_check 2 'NOT TRUSTED:'  --check /tmp /var   || trust_pass=0
 rm -rf "$TRUST_HOME"
 if [ "$trust_pass" -eq 1 ]; then
   printf '  \033[32m✓\033[0m trust round-trip (check, set, check, reset, check)\n'; pass=$((pass+1))
