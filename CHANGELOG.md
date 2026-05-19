@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.6] — 2026-05-19
+
+`pager info` — the install-time banner now exists as a real command you can run any time to see what's installed, what's trusted, what's running.
+
+### Added
+- **`pager info`** subcommand. Prints a comprehensive state summary:
+  - Version (read from `CHANGELOG.md`'s top non-`Unreleased` entry)
+  - Quick-start commands (`start`, `url`, `attach`, `status`, `doctor`)
+  - Stop / restart commands (`stop`, `kill`, `restart`)
+  - **Autostart state** (live, queried via `lib/autostart.sh`)
+  - **Currently trusted folders** (read live from `~/.claude.json`)
+  - File paths (repo, secrets, logs, inventory)
+  - Doc pointers (`pager help`, README, macos/README.md, GitHub)
+- Bootstrap end-banner now delegates to `pager info` instead of printing its own ad-hoc list. Single source of truth — the post-install message stays in sync with the runtime command, no duplication, no drift.
+- Smoke test 9d ensures `pager info` renders without errors and contains a version line. Custom check (not `check_output`) because info's output is long enough to trip SIGPIPE when `grep -q` closes the pipe early under `set -o pipefail`. 26/26 tests pass.
+
+### Why this exists
+The user asked: "When we run install then it should print what we can do and in that we can check or enable all should work. Maybe then we start what should be best way so we never have this problem."
+
+Old bootstrap banner listed 4 commands and called it done. The new `pager info` shows the actual install state, currently-trusted folders, autostart status — so users can see at a glance what's set up and what they might still want to do (e.g. `pager trust ~/code` for a project dir they meant to trust). Runnable any time — `pager info` after an upgrade, after a config change, when something seems off.
+
 ## [0.6.5] — 2026-05-19
 
 Multi-path trust + `PAGER_TRUST_PATHS` env var for reproducible bulk trust.
@@ -540,7 +561,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.5...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.6...HEAD
+[0.6.6]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.6
 [0.6.5]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.5
 [0.6.4]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.4
 [0.6.3]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.3
