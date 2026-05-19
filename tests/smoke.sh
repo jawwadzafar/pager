@@ -178,6 +178,20 @@ else
 fi
 "$PAGER" stop smoke-test >/dev/null 2>&1 || true
 
+# 9b. watchdog with no claude on PATH should log action=claude-missing,
+#     NOT try to restart in a loop. Verifies the v0.6.2 guard.
+total=$((total+1))
+rm -f "$REPO/logs/watch.csv" "$REPO/logs/.stopped"
+# Override PATH to strip the FAKE_BIN that contains our stub claude.
+# /usr/bin:/bin doesn't have claude either, so command -v will fail.
+if env -i HOME="$HOME" PATH="/usr/bin:/bin" TMUX_TMPDIR="$TMUX_TMPDIR" PAGER_NO_REMOTE=1 \
+     "$PAGER" watchdog smoke-test >/dev/null 2>&1 \
+   && awk -F, 'NR==2 { if ($7=="claude-missing") exit 0; exit 1 }' "$REPO/logs/watch.csv"; then
+  printf '  \033[32m✓\033[0m watchdog logs claude-missing (no restart loop)\n'; pass=$((pass+1))
+else
+  printf '  \033[31m✗\033[0m watchdog logs claude-missing (no restart loop)\n'; fail=$((fail+1))
+fi
+
 # 10. ssh subcommand without an inventory entry → clear error, non-zero
 total=$((total+1))
 if "$PAGER" ssh nonexistent-host >/dev/null 2>&1; then
