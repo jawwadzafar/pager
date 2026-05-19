@@ -196,6 +196,111 @@ _watchdog_enable() {
   fi
 }
 
+# ─── trust: pre-accept Claude Code's "Trust this folder?" dialog for a path ─
+# Same flag the bootstrap pre-sets for $HOME. Exposed as a subcommand so users
+# can:
+#   - Pre-trust additional paths beyond $HOME (e.g. project dirs they want
+#     `claude` to operate in without prompting)
+#   - Verify trust state after install (--check)
+#   - Reset trust for testing (--reset)
+#
+# Writes to ~/.claude.json's projects.<absolute-path> entry. Idempotent.
+cmd_trust() {
+  local target_path="$HOME"
+  local mode="set"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --check) mode="check" ;;
+      --reset) mode="reset" ;;
+      -h|--help)
+        cat <<EOF
+$(bold "pager trust") $(dim "[--check | --reset] [PATH]")
+
+  Pre-accept Claude Code's "Trust this folder?" dialog for a directory by
+  writing hasTrustDialogAccepted + hasCompletedProjectOnboarding under
+  projects.<PATH> in ~/.claude.json. Without it, autostart sessions hang
+  on the dialog forever (no human at keyboard).
+
+  PATH defaults to \$HOME. Bootstrap already trusts \$HOME — this command is
+  for adding other paths, verifying, or resetting for testing.
+
+  --check    show current trust state for PATH, no changes (exit 0 if trusted)
+  --reset    remove the trust entry for PATH
+
+Examples:
+  pager trust                           # ensure \$HOME is trusted (default)
+  pager trust ~/code/secrets-project    # also trust this specific dir
+  pager trust --check ~/code/myproj     # report state, no write
+  pager trust --reset ~/code/myproj     # for testing — remove the entry
+EOF
+        return 0
+        ;;
+      -*) echo "$(red "Unknown option:") $1  (try: pager trust --help)" >&2; return 1 ;;
+      *) target_path="$1" ;;
+    esac
+    shift
+  done
+
+  # Normalize to absolute path. If the dir exists we can `cd` into it; if
+  # not (rare — user pre-trusting a path they'll create later), we still
+  # write the entry, just without canonicalization.
+  if [ -d "$target_path" ]; then
+    target_path="$(cd "$target_path" && pwd)"
+  fi
+
+  python3 - "$target_path" "$mode" <<'PYEOF'
+import json, os, sys
+target = sys.argv[1]
+mode = sys.argv[2]
+p = os.path.expanduser('~/.claude.json')
+d = {}
+if os.path.exists(p):
+    try:
+        with open(p) as f: d = json.load(f)
+    except json.JSONDecodeError:
+        print(f"ERROR: ~/.claude.json is not valid JSON. Move it aside and re-run.", file=sys.stderr)
+        sys.exit(2)
+
+projects = d.setdefault('projects', {})
+existing = projects.get(target, {})
+trusted = bool(existing.get('hasTrustDialogAccepted'))
+onboarded = bool(existing.get('hasCompletedProjectOnboarding'))
+
+if mode == 'check':
+    if trusted and onboarded:
+        print(f'TRUSTED:     {target}')
+        sys.exit(0)
+    elif trusted:
+        print(f'PARTIAL:     {target}  (trust set, onboarding not)')
+        sys.exit(1)
+    else:
+        print(f'NOT TRUSTED: {target}')
+        sys.exit(1)
+
+if mode == 'reset':
+    if target in projects:
+        del projects[target]
+        with open(p, 'w') as f: json.dump(d, f, indent=2)
+        os.chmod(p, 0o600)
+        print(f'RESET:       {target}  (entry removed)')
+    else:
+        print(f'NOOP:        {target}  (no entry to remove)')
+    sys.exit(0)
+
+# mode == 'set'
+proj = dict(existing)
+proj['hasTrustDialogAccepted'] = True
+proj['hasCompletedProjectOnboarding'] = True
+projects[target] = proj
+with open(p, 'w') as f: json.dump(d, f, indent=2)
+os.chmod(p, 0o600)
+if trusted and onboarded:
+    print(f'ALREADY:     {target}')
+else:
+    print(f'TRUSTED:     {target}')
+PYEOF
+}
+
 # ─── autostart: install/remove the LaunchAgent (Mac) or systemd unit (Linux) ──
 # As of v0.6.0, the default bootstrap no longer installs the autostart
 # unit. Users opt in here, accepting the macOS first-login TCC prompt
@@ -920,6 +1025,12 @@ $(bold "Remote ops")
   $(bold "ssh")    $(dim "<alias> [cmd]")      SSH to a host from inventory.yaml using creds from .env
   $(bold "run")    $(dim "<alias> <action>")   run actions/<action>.sh on a remote host
 
+$(bold "Trust")
+  $(bold "trust")    $(dim "[--check|--reset] [PATH]")  pre-accept Claude Code's "Trust this folder?"
+                              dialog for PATH (default \$HOME). Bootstrap
+                              already trusts \$HOME; use this to add other
+                              paths, verify state (--check), or reset.
+
 $(bold "Autostart") $(dim "(opt-in; default install does NOT register it)")
   $(bold "autostart")                  show whether autostart is enabled
   $(bold "autostart enable")           install LaunchAgent (Mac) / systemd unit (Linux)
@@ -961,6 +1072,7 @@ case "${1-}" in
   kill)                shift; cmd_kill "$@" ;;
   restart)             shift; cmd_restart "$@" ;;
   autostart)           shift; cmd_autostart "$@" ;;
+  trust)               shift; cmd_trust "$@" ;;
   uninstall)           shift; cmd_uninstall "$@" ;;
   status|ls)           shift; cmd_status "$@" ;;
   url)                 shift; cmd_url "$@" ;;

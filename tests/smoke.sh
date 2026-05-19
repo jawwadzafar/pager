@@ -192,6 +192,35 @@ else
   printf '  \033[31m✗\033[0m watchdog logs claude-missing (no restart loop)\n'; fail=$((fail+1))
 fi
 
+# 9c. pager trust: round-trip set / check / reset against a sandboxed HOME so
+#     we don't pollute the developer's real ~/.claude.json.
+#     Note: `pager trust --check` returns rc=1 when NOT TRUSTED — that's
+#     intentional design. With smoke.sh's `set -euo pipefail`, naive pipes
+#     `... | grep -q ...` would fail on those checks. Capture output first.
+total=$((total+1))
+TRUST_HOME=$(mktemp -d)
+trust_pass=1
+trust_check() {
+  local expected_prefix="$1"; shift
+  local got
+  got=$(env HOME="$TRUST_HOME" "$PAGER" trust "$@" 2>&1 || true)
+  case "$got" in
+    "${expected_prefix}"*) return 0 ;;
+    *) echo "    (unexpected: '$got' expected prefix '$expected_prefix')" >&2; return 1 ;;
+  esac
+}
+trust_check 'NOT TRUSTED:' --check /tmp || trust_pass=0
+trust_check 'TRUSTED:'      /tmp        || trust_pass=0
+trust_check 'TRUSTED:'      --check /tmp || trust_pass=0
+trust_check 'RESET:'        --reset /tmp || trust_pass=0
+trust_check 'NOT TRUSTED:'  --check /tmp || trust_pass=0
+rm -rf "$TRUST_HOME"
+if [ "$trust_pass" -eq 1 ]; then
+  printf '  \033[32m✓\033[0m trust round-trip (check, set, check, reset, check)\n'; pass=$((pass+1))
+else
+  printf '  \033[31m✗\033[0m trust round-trip (check, set, check, reset, check)\n'; fail=$((fail+1))
+fi
+
 # 10. ssh subcommand without an inventory entry → clear error, non-zero
 total=$((total+1))
 if "$PAGER" ssh nonexistent-host >/dev/null 2>&1; then
