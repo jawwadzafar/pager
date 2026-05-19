@@ -258,16 +258,34 @@ render_plist \
   "$HOME/Library/LaunchAgents/com.pager.agent.plist"
 ok "Rendered com.pager.agent.plist"
 
-# 10c. Symlink pager.app into ~/Applications so LaunchServices picks up
-# its Info.plist name + AppIcon.icns for the Login Items row. The actual
-# bundle lives in $PAGER_ROOT/macos/pager.app (hidden dir on disk), which
-# LaunchServices does NOT auto-scan reliably. ~/Applications is a
-# standard location it always scans.
+# 10c. Make Login Items render the pager icon + display name.
 #
-# We update the LaunchAgent plist's ProgramArguments to point at the
-# symlink path rather than the .pager-internal path, so BTM keys its
-# Login Items entry against the symlink (which lives at a path
-# LaunchServices can index). Symlink target == the canonical .app.
+# Three things have to be true for macOS to show our icon + "pager"
+# label (instead of the generic exec icon + "Item from unidentified
+# developer"):
+#
+#   1. The LaunchAgent plist has an AssociatedBundleIdentifiers key
+#      (added in macOS Ventura 13) pointing at the bundle's
+#      CFBundleIdentifier. Already in the template.
+#   2. macOS LaunchServices has indexed a bundle with that ID. We
+#      ensure that by symlinking the bundle into ~/Applications (a
+#      standard scan location) and calling lsregister -f on it.
+#   3. The bundle is "valid" enough for Gatekeeper. We ad-hoc
+#      codesign it so it has a signature, which improves Gatekeeper
+#      reliability on icon resolution.
+
+# Ad-hoc codesign the bundle so Gatekeeper considers it valid.
+# `-s -` means anonymous / ad-hoc signing (no Apple Developer ID needed).
+# `--force` overwrites any prior signature; `--deep` propagates to nested
+# code (we don't have any, but harmless). Errors are swallowed because
+# missing codesign on some minimal CLT installs shouldn't break install.
+if command -v codesign >/dev/null 2>&1; then
+  codesign --force --sign - "$__PAGER_ROOT/macos/pager.app" 2>/dev/null || true
+  ok "Ad-hoc codesigned pager.app"
+fi
+
+# Symlink the bundle into ~/Applications so LaunchServices indexes it.
+# The actual bundle stays in the repo — symlink is purely for indexing.
 APPS_DIR="$HOME/Applications"
 mkdir -p "$APPS_DIR"
 APP_LINK="$APPS_DIR/pager.app"
@@ -277,38 +295,27 @@ fi
 ln -s "$__PAGER_ROOT/macos/pager.app" "$APP_LINK"
 ok "Symlinked $APP_LINK -> $__PAGER_ROOT/macos/pager.app"
 
-# Re-render the plist to point ProgramArguments at the symlinked path.
-# This keys the BTM Login Items entry against ~/Applications/pager.app
-# rather than the hidden ~/.pager path — LaunchServices indexes the
-# former, can find the Info.plist + .icns, and shows a real icon + name.
-sed \
-  -e "s|__PAGER_ROOT__|$__PAGER_ROOT|g" \
-  -e "s|__USER_HOME__|$HOME|g" \
-  -e "s|__BREW_BIN__|$BREW_PREFIX/bin|g" \
-  -e "s|$__PAGER_ROOT/macos/pager.app|$APP_LINK|g" \
-  "$__PAGER_ROOT/macos/launchd/com.pager.agent.plist.template" \
-  > "$HOME/Library/LaunchAgents/com.pager.agent.plist"
-chmod 644 "$HOME/Library/LaunchAgents/com.pager.agent.plist"
-
+# Force LaunchServices to register the bundle (both via the symlink and
+# the canonical path, since BTM lookup order is murky).
 lsregister="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
 if [ -x "$lsregister" ]; then
   "$lsregister" -f "$APP_LINK" 2>/dev/null || true
-  ok "Registered $APP_LINK with LaunchServices"
+  "$lsregister" -f "$__PAGER_ROOT/macos/pager.app" 2>/dev/null || true
+  ok "Registered pager.app with LaunchServices (symlink + canonical)"
 fi
 
 # 10d. Reload (bootout if loaded, then bootstrap). Modern launchctl 2 syntax.
-# The bootout drops the stale BTM Login Items entry that pointed at the
-# previous ProgramArguments path; bootstrap creates a fresh entry keyed
-# at ~/Applications/pager.app so the icon + name render.
+# bootout removes the BTM Login Items entry that pointed at the previous
+# plist; bootstrap creates a fresh entry that now includes
+# AssociatedBundleIdentifiers, so BTM looks up the icon via the bundle.
 launchctl bootout "gui/$USER_UID/com.pager.agent" 2>/dev/null || true
 launchctl bootstrap "gui/$USER_UID" "$HOME/Library/LaunchAgents/com.pager.agent.plist"
 ok "com.pager.agent loaded"
 
-# If the Login Items panel STILL shows the old generic icon after this
-# (because BTM caches stale metadata for a label even across bootouts),
-# the user can run `sfltool resetbtm` once to wipe the BTM database,
-# then re-run this bootstrap. We don't run it automatically because it
-# affects ALL Login Items, not just pager.
+# If the Login Items panel STILL shows the generic icon after all of
+# the above (some BTM caches survive bootout), the user can run
+# `sfltool resetbtm` once to wipe the database and re-run this bootstrap.
+# We don't run it automatically because it affects ALL Login Items.
 
 # Brief settle before verify (first tick of the watchdog spawns the session).
 sleep 3

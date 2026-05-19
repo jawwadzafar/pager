@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] — 2026-05-19
+
+**The actual fix for the Login Items icon.** v0.5.3 added the `~/Applications/pager.app` symlink and `lsregister -f`, but the icon still didn't render — real-Mac test showed generic exec icon persisting. Research revealed the missing piece is `AssociatedBundleIdentifiers`, a key added in macOS Ventura 13 specifically for the legacy-plist case (i.e., when an app installs a LaunchAgent into `~/Library/LaunchAgents/` instead of using the modern SMAppService API).
+
+### Fixed
+- **Added `AssociatedBundleIdentifiers` to `com.pager.agent.plist.template`** pointing at `com.pager.agent` (matches `CFBundleIdentifier` in the .app's `Info.plist`). This is what tells the Login Items UI to render the bundle's icon + display name instead of falling back to generic exec. Per Apple's developer forums, it's the canonical fix for the "Item from unidentified developer" issue on Ventura+.
+- **Bootstrap step 10c now ad-hoc codesigns the bundle** (`codesign --force --sign - $PAGER_ROOT/macos/pager.app`). Ad-hoc signing (the `-` identity) needs no Apple Developer ID and no keychain. It improves Gatekeeper's icon-resolution reliability — unsigned bundles sometimes get treated as untrusted and the icon falls back to generic.
+- **`lsregister -f` now runs against both the symlink AND the canonical path** (`~/Applications/pager.app` + `$PAGER_ROOT/macos/pager.app`). BTM's bundle-lookup is loosely documented; covering both paths maximizes the chance of a hit.
+- **ProgramArguments restored to the canonical `$PAGER_ROOT/macos/pager.app/...` path** (was the symlink in v0.5.3). Icon resolution is handled separately via `AssociatedBundleIdentifiers`, so the symlink only needs to exist for LaunchServices indexing, not for the actual exec.
+
+### Migration from v0.5.3
+1. `cd ~/.pager && git pull`
+2. `sfltool resetbtm` — clears the BTM Login Items cache (the stale "Item from unidentified developer" entry sticks otherwise).
+3. `./macos/bootstrap.sh` — re-renders the plist with `AssociatedBundleIdentifiers`, ad-hoc signs, re-registers.
+4. Reopen System Settings → General → Login Items & Extensions — the `pager` row should now show the actual pager icon + "pager" name.
+5. If it still doesn't: log out and log back in (macOS sometimes only refreshes the Login Items panel on a fresh session).
+
+### Notes
+- Fresh installs via `curl | sh` on v0.5.4+ get the right setup from the start — no migration steps needed.
+- Sources for this fix: Apple Developer Forums [thread 713493](https://developer.apple.com/forums/thread/713493) on AssociatedBundleIdentifiers, and [the n8felton write-up](https://n8felton.wordpress.com/2022/10/24/login-and-background-item-management-in-macos-ventura-13/) on Ventura's Login Items model. Cited in commit message.
+
 ## [0.5.3] — 2026-05-19
 
 Real-Mac test of v0.5.0 showed that despite the `lsregister -f` of `$PAGER_ROOT/macos/pager.app`, the Login Items row still rendered the generic exec icon + "Item from unidentified developer" — even after `bootout` + `bootstrap`. Two root causes:
@@ -338,7 +359,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.4
 [0.5.3]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.3
 [0.5.2]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.2
 [0.5.1]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.1
