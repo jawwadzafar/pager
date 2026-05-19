@@ -412,14 +412,22 @@ By default pager passes `--dangerously-skip-permissions` to `claude` because the
 **To pre-trust additional folders** (so Claude Code doesn't show its "Trust this folder?" dialog when running in a directory other than `$HOME`):
 
 ```bash
-pager trust ~/code/myproject        # add this dir to ~/.claude.json's trusted list
-pager trust --check ~/code/myproj   # verify state
-pager trust --reset ~/code/myproj   # remove the entry (useful when testing)
-pager trust                         # no PATH → re-trust $HOME (idempotent;
-                                    #   bootstrap already did this once)
+pager trust ~/code ~/projects ~/src         # trust multiple dirs in one call
+pager trust --check ~/code/myproj            # verify state (exit 0 if trusted)
+pager trust --reset ~/code/myproj            # remove the entry (testing)
+pager trust                                  # no PATH → re-trust $HOME (idempotent)
 ```
 
-Without trust, an autostart session that ends up in a non-trusted dir hangs forever on the trust prompt with no human to press `1+Enter`. Bootstrap pre-trusts `$HOME` automatically; use `pager trust <path>` for anything else.
+Without trust, an autostart session that ends up in a non-trusted dir hangs forever on the trust prompt with no human to press `1+Enter`. Bootstrap pre-trusts `$HOME` automatically; use `pager trust <path>` for anything else. Claude's trust is **per-exact-path, not hierarchical** — trusting `$HOME` does NOT cover `$HOME/code`.
+
+**For reproducible installs**, set `PAGER_TRUST_PATHS` in `~/.pager/.env` (colon-separated, like `PATH`). Bootstrap reads it and trusts each path at install time:
+
+```bash
+# in ~/.pager/.env
+PAGER_TRUST_PATHS="$HOME/code:$HOME/projects:$HOME/src"
+```
+
+Then re-run bootstrap (or `pager autostart enable`) and those paths are trusted alongside `$HOME`.
 
 The session **auto-starts on boot** via the user systemd unit `pager.service` (linger enabled). To disable:
 ```bash

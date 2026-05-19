@@ -241,6 +241,22 @@ else
   fi
 fi
 
+# 6b. Trust extra paths from PAGER_TRUST_PATHS (colon-separated, additive
+# to $HOME). Sourced from .env at the top of this script.
+if [ -n "${PAGER_TRUST_PATHS:-}" ]; then
+  log "6b/8 trust extra paths"
+  _IFS_SAVE="${IFS-}"
+  IFS=:
+  # shellcheck disable=SC2086  # intentional word-split on the env var
+  set -- $PAGER_TRUST_PATHS
+  IFS="$_IFS_SAVE"
+  if [ -x "$__PAGER_ROOT/bin/pager" ]; then
+    "$__PAGER_ROOT/bin/pager" trust "$@" 2>&1 | sed 's/^/    /' || warn "some PAGER_TRUST_PATHS entries failed"
+  else
+    warn "bin/pager not yet executable — skipped extra-path trust. Run \`pager trust\` after install."
+  fi
+fi
+
 # 7. AUTOSTART (on by default; --no-autostart to skip) -----------------------
 # Pager's pitch is "Claude Code that never sleeps" — autostart is what
 # delivers that. Default registers the systemd --user units; pass
