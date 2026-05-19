@@ -409,6 +409,18 @@ PAGER_NO_DANGEROUS=1 pager start sandbox
 ```
 By default pager passes `--dangerously-skip-permissions` to `claude` because there's no human at the keyboard when the LaunchAgent fires at login. Side effect: claude prints a loud "Bypass Permissions mode" banner at startup — that's expected; see [`macos/README.md`](macos/README.md) for the deeper explanation.
 
+**To pre-trust additional folders** (so Claude Code doesn't show its "Trust this folder?" dialog when running in a directory other than `$HOME`):
+
+```bash
+pager trust ~/code/myproject        # add this dir to ~/.claude.json's trusted list
+pager trust --check ~/code/myproj   # verify state
+pager trust --reset ~/code/myproj   # remove the entry (useful when testing)
+pager trust                         # no PATH → re-trust $HOME (idempotent;
+                                    #   bootstrap already did this once)
+```
+
+Without trust, an autostart session that ends up in a non-trusted dir hangs forever on the trust prompt with no human to press `1+Enter`. Bootstrap pre-trusts `$HOME` automatically; use `pager trust <path>` for anything else.
+
 The session **auto-starts on boot** via the user systemd unit `pager.service` (linger enabled). To disable:
 ```bash
 systemctl --user disable --now pager.service

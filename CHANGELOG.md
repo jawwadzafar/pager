@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] — 2026-05-19
+
+`pager trust` subcommand — exposes the trust-flag write the bootstraps have always done internally, but as a first-class user-facing command.
+
+### Added
+- **`pager trust [--check | --reset] [PATH]`** — pre-accept Claude Code's "Trust this folder?" dialog for any directory by writing `hasTrustDialogAccepted` + `hasCompletedProjectOnboarding` to `~/.claude.json`'s `projects.<absolute-path>` entry. Default PATH is `$HOME`. Idempotent.
+  - `pager trust ~/code/myproj` — add a project dir to the trusted list
+  - `pager trust --check <PATH>` — report state, exit 0 if fully trusted, 1 otherwise
+  - `pager trust --reset <PATH>` — remove the entry (testing convenience)
+- New smoke test "trust round-trip (check, set, check, reset, check)" against a sandboxed HOME so the real `~/.claude.json` isn't polluted. 25/25 tests pass now.
+- `cmd_help` gains a dedicated `Trust` section. README env-overrides section gains a `pager trust` example block.
+
+### Why this exists
+The bootstrap has always pre-trusted `$HOME` so autostart-spawned claude sessions don't hang on the trust prompt. But:
+1. Users running claude in dirs other than `$HOME` couldn't pre-trust those without manually editing `~/.claude.json`
+2. There was no documented way to verify the bootstrap actually set the flag (other than `python3 -c "..."` one-liners)
+3. Resetting trust for testing required hand-editing the JSON
+
+`pager trust` makes all three first-class. The bootstrap-time pre-set is unchanged — this is purely additive.
+
 ## [0.6.3] — 2026-05-19
 
 Real-Mac install on a different user (yashwant.singh on a separate box) surfaced two issues. Fixing both.
@@ -501,7 +521,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.4
 [0.6.3]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.3
 [0.6.2]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.2
 [0.6.1]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.1
