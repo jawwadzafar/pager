@@ -292,50 +292,16 @@ else
   warn "no tmux sessions yet — run 'pager start' to spawn one"
 fi
 
-URL=""
-if [ -x "$__PAGER_ROOT/bin/pager" ]; then
-  URL=$("$__PAGER_ROOT/bin/pager" url 2>/dev/null | awk '{print $2}' | head -1 || true)
-fi
-
-cat <<EOF
-
-──────────────────────────────────────────────────────────────────────
-  DONE. What to do next:
-
-  1. Open a new shell (or 'source ~/.bashrc') so PATH + env load.
-  2. 'pager start' to spawn the persistent claude session.
-  3. 'pager url' to print the phone-accessible URL.
-  4. 'pager attach' to talk to the local session.
-
-EOF
-
-if [ -n "$URL" ]; then
-  echo "  Right now on this box:"
-  echo "    Remote Control URL: $URL"
-  echo ""
-fi
-
-if [ "$SKIP_AUTOSTART" -eq 1 ] && [ "$autostart_was_enabled" -ne 1 ]; then
-cat <<'EOF'
-  Notes for Linux:
-    * --no-autostart was given. Pager runs only when you type
-      'pager start'. No systemd units registered.
-    * To enable autostart later:  pager autostart enable
-    * Current state:              pager autostart status
-EOF
-else
-cat <<'EOF'
-  Notes for Linux:
-    * Autostart is registered. Pager comes back at every LOGIN.
-      To disable later: pager autostart disable
-    * For boot-time start (before any login), enable linger manually:
-          sudo loginctl enable-linger $USER
-EOF
-fi
-
-cat <<'EOF'
-
-  Re-running this script is safe -- only does work that is missing.
-  See `pager help` for the full command surface.
-──────────────────────────────────────────────────────────────────────
-EOF
+echo
+echo "══════════════════════════════════════════════════════════════════"
+echo "  DONE."
+echo "  Open a new shell (or 'source ~/.bashrc') so PATH + env load,"
+echo "  then run \`pager info\` any time to see this:"
+echo "══════════════════════════════════════════════════════════════════"
+# All state details (trusted folders, autostart, URL, command surface,
+# doc pointers) defer to `pager info` so this banner stays in sync with
+# the runtime command.
+"$__PAGER_ROOT/bin/pager" info 2>&1 || true
+echo "══════════════════════════════════════════════════════════════════"
+echo "  Re-running ./linux/bootstrap.sh is safe — only does missing work."
+echo "══════════════════════════════════════════════════════════════════"

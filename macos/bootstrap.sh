@@ -305,54 +305,17 @@ else
   autostart_enable
 fi
 
-URL=""
-if [ -x "$__PAGER_ROOT/bin/pager" ]; then
-  URL=$("$__PAGER_ROOT/bin/pager" url 2>/dev/null | awk '{print $2}' | head -1 || true)
-fi
-
-cat <<EOF
-
-──────────────────────────────────────────────────────────────────────
-  DONE. What to do next:
-
-  1. Open a new shell (or 'source ~/.zprofile && source ~/.zshrc') so
-     PATH + env load.
-  2. 'pager start' to spawn the persistent claude session.
-  3. 'pager url' to print the phone-accessible URL.
-  4. 'pager attach' to talk to the local session.
-
-EOF
-
-if [ -n "$URL" ]; then
-  echo "  Right now on this box:"
-  echo "    Remote Control URL: $URL"
-  echo ""
-fi
-
-if [ "$SKIP_AUTOSTART" -eq 1 ] && [ "$autostart_was_enabled" -ne 1 ]; then
-cat <<'EOF'
-  Notes for macOS:
-    * --no-autostart was given. Pager runs only when you type
-      'pager start'. No LaunchAgent, no TCC prompts.
-    * To enable autostart later:  pager autostart enable
-    * Current state:              pager autostart status
-EOF
-else
-cat <<'EOF'
-  Notes for macOS:
-    * Autostart is registered. Pager comes back at every LOGIN.
-      To disable later (sessions you started manually keep running):
-          pager autostart disable
-    * For boot-time start without a login, enable auto-login in
-      System Settings -> Users & Groups (incompatible with FileVault).
-    * macos/README.md has the full table of macOS TCC prompts you'll
-      see on first login and what each one does.
-EOF
-fi
-
-cat <<'EOF'
-
-  Re-running this script is safe -- only does work that is missing.
-  See `pager help` for the full command surface.
-──────────────────────────────────────────────────────────────────────
-EOF
+echo
+echo "══════════════════════════════════════════════════════════════════"
+echo "  DONE."
+echo "  Open a new shell (or 'source ~/.zprofile && source ~/.zshrc')"
+echo "  so PATH + env load, then run \`pager info\` any time to see this:"
+echo "══════════════════════════════════════════════════════════════════"
+# All the per-state details (currently trusted folders, autostart state,
+# URL, command surface, doc pointers) — defer to `pager info` so the
+# install-time banner stays in sync with the runtime command and we
+# don't duplicate the formatting logic.
+"$__PAGER_ROOT/bin/pager" info 2>&1 || true
+echo "══════════════════════════════════════════════════════════════════"
+echo "  Re-running ./macos/bootstrap.sh is safe — only does missing work."
+echo "══════════════════════════════════════════════════════════════════"

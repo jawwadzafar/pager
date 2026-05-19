@@ -236,6 +236,17 @@ else
   printf '  \033[31m✗\033[0m trust round-trip (check, set, check, reset, check)\n'; fail=$((fail+1))
 fi
 
+# 9d. `pager info` should render without errors and include a version line.
+# Custom check rather than check_output because info's stdout is long enough
+# to trip SIGPIPE (exit 141) when grep -q closes the pipe early under
+# `set -o pipefail`.
+total=$((total+1))
+info_out=$("$PAGER" info 2>&1 || true)
+case "$info_out" in
+  *"pager v"*) printf '  \033[32m✓\033[0m info: prints version line\n'; pass=$((pass+1)) ;;
+  *)           printf '  \033[31m✗\033[0m info: prints version line\n'; fail=$((fail+1)) ;;
+esac
+
 # 10. ssh subcommand without an inventory entry → clear error, non-zero
 total=$((total+1))
 if "$PAGER" ssh nonexistent-host >/dev/null 2>&1; then

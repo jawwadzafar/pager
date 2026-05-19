@@ -196,6 +196,113 @@ _watchdog_enable() {
   fi
 }
 
+# ─── info: full "what's installed and what can I do" summary ───────────────
+# Bootstrap calls this at the end instead of an ad-hoc banner. Users can also
+# run it any time after install to see the current state.
+#
+# Shows: version, quick commands, currently-trusted folders (from
+# ~/.claude.json), autostart state, key file paths, doc pointers.
+cmd_info() {
+  # Version: read the top non-Unreleased entry from CHANGELOG, or "DEV" if
+  # we can't find one.
+  local version
+  version="$(grep -m1 -E '^## \[[0-9]+\.[0-9]+' "$__PAGER_ROOT/CHANGELOG.md" 2>/dev/null \
+             | sed -E 's/^## \[([^]]+)\].*/v\1/')"
+  version="${version:-vDEV}"
+
+  # Autostart state — call lib/autostart.sh's status function silently.
+  # shellcheck source=../lib/autostart.sh
+  # shellcheck disable=SC1091
+  . "$__PAGER_ROOT/lib/autostart.sh"
+  local autostart_state
+  if autostart_status >/dev/null 2>&1; then
+    autostart_state="$(green ENABLED)"
+  else
+    autostart_state="$(yellow disabled)"
+  fi
+
+  # Trusted paths — pull from ~/.claude.json.
+  local trusted_list
+  trusted_list="$(python3 -c '
+import json, os, sys
+p = os.path.expanduser("~/.claude.json")
+if not os.path.exists(p):
+    sys.exit(0)
+try:
+    with open(p) as f: d = json.load(f)
+except json.JSONDecodeError:
+    sys.exit(0)
+for path, info in sorted(d.get("projects", {}).items()):
+    if info.get("hasTrustDialogAccepted") and info.get("hasCompletedProjectOnboarding"):
+        print(path)
+' 2>/dev/null)"
+
+  # Use raw ANSI codes for the banner so that variable substitution inside
+  # the heredoc doesn't have to call bold/dim/etc. (which can't be nested
+  # inside another $( ) cleanly).
+  local b d r green
+  b=$'\033[1m'; d=$'\033[2m'; r=$'\033[0m'; green=$'\033[32m'
+
+  cat <<EOF
+
+${b}pager ${version}${r}   ${d}$__PAGER_ROOT${r}
+
+${b}Quick start${r}
+  ${b}pager start${r}${d}             spawn the persistent claude session${r}
+  ${b}pager url${r}${d}               print the phone-accessible URL${r}
+  ${b}pager attach${r}${d}            attach your terminal (Ctrl-b d to detach)${r}
+  ${b}pager status${r}${d}            list running sessions${r}
+  ${b}pager doctor${r}${d}            health check (deps, services, trust, watchdog)${r}
+
+${b}Stop / restart${r}
+  ${b}pager stop${r}${d}              kill + pause watchdog (persistent stop)${r}
+  ${b}pager kill${r}${d}              kill; watchdog will respawn at next tick${r}
+  ${b}pager restart${r}${d}           kill + start immediately${r}
+
+${b}Autostart${r}   ${autostart_state}
+  ${b}pager autostart status${r}${d}  show current state${r}
+  ${b}pager autostart enable${r}${d}  register so pager comes back at login${r}
+  ${b}pager autostart disable${r}${d} remove the LaunchAgent / systemd unit${r}
+
+${b}Trusted folders${r}   ${d}(Claude Code's "Trust this folder?" dialog won't fire)${r}
+EOF
+
+  if [ -n "$trusted_list" ]; then
+    printf '%s%s%s\n' "$green" "$trusted_list" "$r" | sed 's/^/    /'
+  else
+    # shellcheck disable=SC2016  # literal $HOME intended in the printed message
+    printf '    %s(none -- bootstrap normally trusts $HOME automatically)%s\n' "$d" "$r"
+  fi
+
+  cat <<EOF
+
+  ${b}pager trust ~/code ~/projects${r}${d}        ad-hoc trust multiple dirs${r}
+  ${b}pager trust --check ~/code/myproj${r}${d}    verify state${r}
+  ${b}PAGER_TRUST_PATHS${r}${d} in ~/.pager/.env  persistent (read by bootstrap)${r}
+
+${b}Files${r}
+  ${b}repo:${r}      $__PAGER_ROOT
+  ${b}secrets:${r}   $__PAGER_ROOT/.env  ${d}(chmod 600, gitignored)${r}
+  ${b}logs:${r}      $__PAGER_ROOT/logs/  ${d}(claude.log, watch.csv)${r}
+  ${b}inventory:${r} $__PAGER_ROOT/inventory.yaml
+
+${b}Docs${r}
+  ${b}pager help${r}${d}              full command reference${r}
+  ${b}$__PAGER_ROOT/README.md${r}
+EOF
+
+  if [ "$PAGER_OS" = "mac" ]; then
+    cat <<EOF
+  ${b}$__PAGER_ROOT/macos/README.md${r}${d}     macOS specifics (TCC, Login Items, prompts)${r}
+EOF
+  fi
+
+  cat <<EOF
+  ${b}https://github.com/jawwadzafar/pager${r}${d}  source + issues${r}
+
+EOF
+}
+
 # ─── trust: pre-accept Claude Code's "Trust this folder?" dialog for a path ─
 # Same flag the bootstrap pre-sets for $HOME. Exposed as a subcommand so users
 # can:
@@ -1059,6 +1166,9 @@ $(bold "Autostart") $(dim "(opt-in; default install does NOT register it)")
                               started manually keep running.
 
 $(bold "Other")
+  $(bold "info")                       full state summary (version, commands, trusted
+                              folders, autostart, paths, docs). What bootstrap
+                              prints at the end of install.
   $(bold "uninstall") $(dim "[-y]")            tear down system integration (services, symlink,
                               shell rc lines). Keeps the repo + .env intact.
                               Final cleanup: rm -rf $__PAGER_ROOT
@@ -1092,6 +1202,7 @@ case "${1-}" in
   restart)             shift; cmd_restart "$@" ;;
   autostart)           shift; cmd_autostart "$@" ;;
   trust)               shift; cmd_trust "$@" ;;
+  info)                shift; cmd_info "$@" ;;
   uninstall)           shift; cmd_uninstall "$@" ;;
   status|ls)           shift; cmd_status "$@" ;;
   url)                 shift; cmd_url "$@" ;;
