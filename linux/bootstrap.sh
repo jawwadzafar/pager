@@ -11,6 +11,35 @@ set -euo pipefail
 # to find the repo root.
 __PAGER_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 USER_NAME="${USER:-$(whoami)}"
+# PAGER_OS is consumed by lib/autostart.sh.
+# shellcheck disable=SC2034
+PAGER_OS="linux"
+
+# Flags
+SKIP_AUTOSTART=0
+for arg in "$@"; do
+  case "$arg" in
+    --no-autostart) SKIP_AUTOSTART=1 ;;
+    --autostart)    SKIP_AUTOSTART=0 ;;   # explicit "yes" (default; kept for symmetry)
+    -h|--help)
+      cat <<USAGE
+Usage: $0 [--no-autostart]
+
+  Installs pager on Linux. By default, registers systemd --user units
+  (pager.service + pager-watch.timer) so the session comes back at
+  login. That's the "Claude Code that never sleeps" pitch.
+
+  --no-autostart   skip the systemd unit registration. pager only runs
+                   when you type 'pager start'. Opt in later with
+                   'pager autostart enable'.
+
+  For boot-time start before any login, separately run:
+      sudo loginctl enable-linger \$USER
+USAGE
+      exit 0
+      ;;
+  esac
+done
 
 # --- ensure ~/pager/.env exists FIRST (sudo helper needs it) -------------------
 if [ ! -f "$__PAGER_ROOT/.env" ]; then
@@ -167,55 +196,39 @@ else
   fi
 fi
 
-# 7. SYSTEMD USER UNITS (service + watchdog) ---------------------------------
-log "7/10 systemd user units"
-mkdir -p "$HOME/.config/systemd/user"
-# Render the unit templates with __PAGER_ROOT__ substituted to the real
-# install path. This is what makes a clone at ~/.pager (or anywhere else
-# besides ~/pager) work — the units previously hard-coded `%h/pager/...`.
-render_unit() {
-  local src="$1" dst="$2"
-  sed -e "s|__PAGER_ROOT__|$__PAGER_ROOT|g" "$src" > "$dst"
-  chmod 644 "$dst"
-}
-render_unit "$__PAGER_ROOT/linux/systemd/pager.service"       "$HOME/.config/systemd/user/pager.service"
-render_unit "$__PAGER_ROOT/linux/systemd/pager-watch.service" "$HOME/.config/systemd/user/pager-watch.service"
-render_unit "$__PAGER_ROOT/linux/systemd/pager-watch.timer"   "$HOME/.config/systemd/user/pager-watch.timer"
-systemctl --user daemon-reload
-systemctl --user enable pager.service       >/dev/null 2>&1
-systemctl --user enable pager-watch.timer   >/dev/null 2>&1
-ok "pager.service + pager-watch.timer installed and enabled"
+# 7. AUTOSTART (on by default; --no-autostart to skip) -----------------------
+# Pager's pitch is "Claude Code that never sleeps" — autostart is what
+# delivers that. Default registers the systemd --user units; pass
+# --no-autostart to skip.
+log "7/8 autostart"
 
-# 8. LINGER (boot-time autostart, no login needed) ----------------------------
-log "8/10 boot-time autostart (linger)"
-if [ "$(loginctl show-user "$USER_NAME" -p Linger 2>/dev/null | cut -d= -f2)" = "yes" ]; then
-  ok "Linger already enabled"
+autostart_was_enabled=0
+if [ -f "$HOME/.config/systemd/user/pager.service" ]; then
+  autostart_was_enabled=1
+fi
+
+if [ "$SKIP_AUTOSTART" -eq 1 ] && [ "$autostart_was_enabled" -ne 1 ]; then
+  ok "autostart NOT registered (--no-autostart given). 'pager autostart enable' later to opt in."
 else
-  $SUDO loginctl enable-linger "$USER_NAME"
-  ok "Linger enabled — services now start at boot"
+  # shellcheck source=../lib/autostart.sh
+  # shellcheck disable=SC1091
+  . "$__PAGER_ROOT/lib/autostart.sh"
+  autostart_enable
+  # Apply trust-state-changed restart if applicable.
+  if [ "${TRUST_CHANGED:-0}" -eq 1 ]; then
+    systemctl --user restart pager.service 2>/dev/null || true
+    ok "Restarted pager.service to apply new trust state"
+  fi
+  sleep 3
 fi
 
-# 9. START THE SERVICE + WATCHDOG --------------------------------------------
-log "9/10 start pager.service + pager-watch.timer"
-if ! systemctl --user is-active --quiet pager.service; then
-  systemctl --user start pager.service
-elif [ "$TRUST_CHANGED" -eq 1 ]; then
-  # Trust state changed; restart so the running session picks up new trust.
-  systemctl --user restart pager.service
-  ok "Restarted pager.service to apply new trust state"
-fi
-ok "pager.service active"
-systemctl --user start pager-watch.timer >/dev/null 2>&1 || true
-ok "pager-watch.timer started"
-sleep 3
-
-# 10. VERIFY ------------------------------------------------------------------
-log "10/10 verify"
+# 8. VERIFY ------------------------------------------------------------------
+log "8/8 verify"
 if tmux ls 2>/dev/null | grep -q .; then
   tmux ls
   ok "tmux session(s) running"
 else
-  warn "no tmux sessions yet — try 'pager status' in a few seconds"
+  warn "no tmux sessions yet — run 'pager start' to spawn one"
 fi
 
 URL=""
@@ -229,7 +242,7 @@ cat <<EOF
   DONE. What to do next:
 
   1. Open a new shell (or 'source ~/.bashrc') so PATH + env load.
-  2. 'pager' to see every available tool.
+  2. 'pager start' to spawn the persistent claude session.
   3. 'pager url' to print the phone-accessible URL.
   4. 'pager attach' to talk to the local session.
 
@@ -241,7 +254,27 @@ if [ -n "$URL" ]; then
   echo ""
 fi
 
-cat <<EOF
-  Re-running this script is safe — it only does work that's missing.
+if [ "$SKIP_AUTOSTART" -eq 1 ] && [ "$autostart_was_enabled" -ne 1 ]; then
+cat <<'EOF'
+  Notes for Linux:
+    * --no-autostart was given. Pager runs only when you type
+      'pager start'. No systemd units registered.
+    * To enable autostart later:  pager autostart enable
+    * Current state:              pager autostart status
+EOF
+else
+cat <<'EOF'
+  Notes for Linux:
+    * Autostart is registered. Pager comes back at every LOGIN.
+      To disable later: pager autostart disable
+    * For boot-time start (before any login), enable linger manually:
+          sudo loginctl enable-linger $USER
+EOF
+fi
+
+cat <<'EOF'
+
+  Re-running this script is safe -- only does work that is missing.
+  See `pager help` for the full command surface.
 ──────────────────────────────────────────────────────────────────────
 EOF

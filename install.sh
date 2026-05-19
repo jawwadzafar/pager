@@ -74,9 +74,10 @@ else
   ok "Cloned to $TARGET"
 fi
 
-# -- run platform bootstrap --
+# -- run platform bootstrap (pass through any flags the caller gave us) --
+# Today the only flag we forward is --autostart (opt-in autostart registration).
 log "Running $OS bootstrap (this is the longest step)..."
 case "$OS" in
-  linux) exec "$TARGET/linux/bootstrap.sh" ;;
-  mac)   exec "$TARGET/macos/bootstrap.sh" ;;
+  linux) exec "$TARGET/linux/bootstrap.sh" "$@" ;;
+  mac)   exec "$TARGET/macos/bootstrap.sh" "$@" ;;
 esac

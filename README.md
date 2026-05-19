@@ -101,7 +101,21 @@ Each session is independent — separate context, separate URL, separate log at 
 curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh
 ```
 
-The installer detects your OS (Linux or macOS), checks you have `git`, clones `pager` into `~/.pager`, and runs the platform bootstrap — `apt` + `systemd --user` units on Linux, Homebrew + LaunchAgent on macOS. **Idempotent** — re-run any time to update (does a `git pull` + re-bootstrap).
+Detects your OS, checks you have `git`, clones `pager` into `~/.pager`, installs deps (apt on Linux, brew on macOS), wires your shell, **and registers the session to come back at every login**. On macOS that means a LaunchAgent; on Linux a systemd `--user` unit. **First login after install on macOS triggers a one-time stack of TCC permission prompts** — see [`macos/README.md`](macos/README.md#after-first-login-on-macos-what-the-prompts-mean) for what's safe to deny (most of them). **Idempotent** — re-run any time to update.
+
+### Don't want autostart?
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh -s -- --no-autostart
+```
+
+Skips the LaunchAgent / systemd registration. Pager only runs when you type `pager start`. Opt in later if you change your mind:
+
+```bash
+pager autostart enable          # register and start at next login
+pager autostart status          # see current state
+pager autostart disable         # remove the unit, stop autostarting
+```
 
 Env overrides if you want a non-default install:
 

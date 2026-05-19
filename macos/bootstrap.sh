@@ -9,7 +9,34 @@ set -euo pipefail
 
 __PAGER_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 USER_NAME="${USER:-$(whoami)}"
-USER_UID="$(id -u)"
+# PAGER_OS is consumed by lib/autostart.sh when we source it for --autostart.
+# shellcheck disable=SC2034
+PAGER_OS="mac"
+
+# Flags
+SKIP_AUTOSTART=0
+for arg in "$@"; do
+  case "$arg" in
+    --no-autostart) SKIP_AUTOSTART=1 ;;
+    --autostart)    SKIP_AUTOSTART=0 ;;   # explicit "yes" (default; kept for symmetry)
+    -h|--help)
+      cat <<USAGE
+Usage: $0 [--no-autostart]
+
+  Installs pager on macOS. By default, registers a LaunchAgent so the
+  session comes back at every login (that's the "Claude Code that
+  never sleeps" pitch — the reason pager exists). First login after
+  install triggers a one-time stack of macOS TCC permission prompts;
+  see macos/README.md for the safe-to-deny list.
+
+  --no-autostart   skip LaunchAgent registration. pager only runs when
+                   you type 'pager start'. No prompts. You can opt in
+                   later with 'pager autostart enable'.
+USAGE
+      exit 0
+      ;;
+  esac
+done
 
 # --- platform guard ----------------------------------------------------------
 if [ "$(uname -s)" != "Darwin" ]; then
@@ -221,141 +248,34 @@ else
   fi
 fi
 
-# 10. LAUNCHAGENT (single combined agent) ------------------------------------
-# Earlier versions (0.2.0 – 0.2.2) installed two agents: com.pager.session
-# and com.pager.watch. macOS lists each as a separate Login Items entry,
-# which is noisy. From 0.2.3 onward we ship a single com.pager.agent that
-# runs the watchdog periodically (its existing restart path handles the
-# initial spawn too, so we don't lose anything). This block migrates any
-# old two-agent install in place.
-log "10/11 LaunchAgent (single combined agent)"
-mkdir -p "$HOME/Library/LaunchAgents"
-mkdir -p "$__PAGER_ROOT/logs"
+# 10. AUTOSTART (on by default; --no-autostart to skip) ----------------------
+# Pager's whole pitch is "Claude Code that never sleeps" — autostart is
+# how that works. So by default we register the LaunchAgent here. Users
+# who explicitly don't want it can pass --no-autostart and opt in later
+# via 'pager autostart enable'.
+log "10/10 autostart"
 
-# 10a. Tear down the old two-agent layout if present (idempotent).
-for old in com.pager.session com.pager.watch; do
-  if [ -f "$HOME/Library/LaunchAgents/$old.plist" ]; then
-    launchctl bootout "gui/$USER_UID/$old" 2>/dev/null || true
-    rm -f "$HOME/Library/LaunchAgents/$old.plist"
-    ok "Migrated away from $old (booted out + removed)"
+autostart_was_enabled=0
+if [ -f "$HOME/Library/LaunchAgents/com.pager.agent.plist" ]; then
+  autostart_was_enabled=1
+fi
+
+if [ "$SKIP_AUTOSTART" -eq 1 ] && [ "$autostart_was_enabled" -ne 1 ]; then
+  ok "autostart NOT registered (--no-autostart given). 'pager autostart enable' later to opt in."
+else
+  # Heads-up before triggering the macOS TCC prompt storm. Users see this
+  # in the terminal scrollback alongside the prompts, so the dialogs are
+  # less surprising. macos/README.md has the full safe-to-deny table.
+  if [ "$autostart_was_enabled" -ne 1 ]; then
+    warn "macOS will pop up a stack of permission prompts on first login."
+    warn "  ALLOW:        'tmux would like to access data from other apps' (App Management)"
+    warn "  DON'T ALLOW:  Full Disk Access, Music, Photos, Contacts, Documents — pager doesn't need any."
+    warn "  See macos/README.md for the full table. Choices are remembered; you only see them once."
   fi
-done
-
-# 10b. Render the combined agent template with absolute paths substituted in.
-# launchd plists don't expand $HOME or ~; they need literal absolute paths.
-render_plist() {
-  local src="$1" dst="$2"
-  sed \
-    -e "s|__PAGER_ROOT__|$__PAGER_ROOT|g" \
-    -e "s|__USER_HOME__|$HOME|g" \
-    -e "s|__BREW_BIN__|$BREW_PREFIX/bin|g" \
-    "$src" > "$dst"
-  chmod 644 "$dst"
-}
-
-render_plist \
-  "$__PAGER_ROOT/macos/launchd/com.pager.agent.plist.template" \
-  "$HOME/Library/LaunchAgents/com.pager.agent.plist"
-ok "Rendered com.pager.agent.plist"
-
-# 10c. Make Login Items render the pager icon + display name.
-#
-# What it takes for macOS to show our icon + "pager" label instead of
-# the generic exec icon + "Item from unidentified developer":
-#
-#   1. The LaunchAgent plist has an AssociatedBundleIdentifiers key
-#      (macOS Ventura 13+) pointing at CFBundleIdentifier. Already in
-#      the template.
-#   2. LaunchServices has indexed a bundle with that ID, AND Spotlight
-#      can see it. **This is the part 0.5.0-0.5.4 got wrong.** A
-#      symlinked bundle into ~/Applications doesn't get indexed by
-#      Spotlight if the symlink target is inside a hidden directory
-#      (~/.pager). Confirmed via `mdfind kMDItemCFBundleIdentifier ==
-#      "com.pager.agent"` returning empty after the symlink approach.
-#      Fix: COPY the bundle as a real directory into ~/Applications.
-#      Spotlight then indexes it normally.
-#   3. The bundle is "valid" enough for Gatekeeper. Ad-hoc codesign
-#      it (no Apple Developer ID needed).
-#
-# The .app's Contents/MacOS/pager launcher uses $PAGER_ROOT (set in
-# the plist EnvironmentVariables) to find the real bin/pager — so the
-# copy at ~/Applications/pager.app is purely metadata; actual execution
-# routes back to the canonical install at $PAGER_ROOT/bin/pager.
-
-# (v0.5.6 compiled a C launcher into the .app here. v0.5.7 reverted to
-# a committed shell shim — both worked functionally, but the Mach-O
-# launcher didn't deliver the hoped-for Login Items icon fix, while
-# adding a compile step and triggering more macOS TCC permission
-# prompts on first run. Simpler shim wins.)
-
-APPS_DIR="$HOME/Applications"
-mkdir -p "$APPS_DIR"
-APP_COPY="$APPS_DIR/pager.app"
-
-# Wipe whatever's at APP_COPY (could be a stale symlink from 0.5.3-0.5.4,
-# a directory copy from 0.5.5, or an older 0.5.6 build). rm -rf handles all.
-rm -rf "$APP_COPY"
-
-# Copy the bundle as a real directory. cp -R preserves structure,
-# permissions, and the executable bit on the compiled launcher.
-cp -R "$__PAGER_ROOT/macos/pager.app" "$APP_COPY"
-ok "Copied pager.app -> $APP_COPY"
-
-# Ad-hoc codesign the COPY (recursively signs the launcher binary inside).
-# `-s -` is anonymous signing — no Apple Developer ID needed.
-if command -v codesign >/dev/null 2>&1; then
-  codesign --force --sign - "$APP_COPY" 2>/dev/null || true
-  ok "Ad-hoc codesigned $APP_COPY"
-fi
-
-# Force LaunchServices to register the copy. lsregister -f primes
-# both the LS database and the Spotlight metadata index, which is
-# what Login Items reads when looking up AssociatedBundleIdentifiers.
-lsregister="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
-if [ -x "$lsregister" ]; then
-  "$lsregister" -f "$APP_COPY" 2>/dev/null || true
-  ok "Registered $APP_COPY with LaunchServices"
-fi
-
-# Update the plist to point ProgramArguments at the copy too — keeps
-# everything pointing at one location (the indexable one). The
-# launcher inside still exec's $PAGER_ROOT/bin/pager via env, so
-# actual code lives in the canonical repo.
-sed -i.bak \
-  -e "s|$__PAGER_ROOT/macos/pager.app|$APP_COPY|g" \
-  "$HOME/Library/LaunchAgents/com.pager.agent.plist"
-rm -f "$HOME/Library/LaunchAgents/com.pager.agent.plist.bak"
-
-# 10d. Reload (bootout if loaded, then bootstrap). Modern launchctl 2 syntax.
-# bootout removes the BTM Login Items entry that pointed at the previous
-# plist; bootstrap creates a fresh entry. Now BTM's icon-resolution path
-# can find an indexed bundle at ~/Applications/pager.app via the
-# AssociatedBundleIdentifiers key, and renders the icon + "pager" name.
-launchctl bootout "gui/$USER_UID/com.pager.agent" 2>/dev/null || true
-launchctl bootstrap "gui/$USER_UID" "$HOME/Library/LaunchAgents/com.pager.agent.plist"
-ok "com.pager.agent loaded"
-
-# If the Login Items panel STILL shows the generic icon after all of
-# the above (some BTM caches survive bootout), the user can run
-# `sfltool resetbtm` once to wipe the database and re-run this bootstrap.
-# We don't run it automatically because it affects ALL Login Items.
-
-# Brief settle before verify (first tick of the watchdog spawns the session).
-sleep 3
-
-# 11. VERIFY ------------------------------------------------------------------
-log "11/11 verify"
-if launchctl print "gui/$USER_UID/com.pager.agent" >/dev/null 2>&1; then
-  ok "com.pager.agent registered with launchd"
-else
-  warn "com.pager.agent not visible to launchctl — check ~/pager/logs/launchd-agent.err"
-fi
-
-if tmux ls 2>/dev/null | grep -q .; then
-  tmux ls
-  ok "tmux session(s) running"
-else
-  warn "no tmux sessions yet — try 'pager status' in a few seconds, or check launchd-session.err"
+  # shellcheck source=../lib/autostart.sh
+  # shellcheck disable=SC1091
+  . "$__PAGER_ROOT/lib/autostart.sh"
+  autostart_enable
 fi
 
 URL=""
@@ -370,7 +290,7 @@ cat <<EOF
 
   1. Open a new shell (or 'source ~/.zprofile && source ~/.zshrc') so
      PATH + env load.
-  2. 'pager' to see every available tool.
+  2. 'pager start' to spawn the persistent claude session.
   3. 'pager url' to print the phone-accessible URL.
   4. 'pager attach' to talk to the local session.
 
@@ -382,19 +302,30 @@ if [ -n "$URL" ]; then
   echo ""
 fi
 
+if [ "$SKIP_AUTOSTART" -eq 1 ] && [ "$autostart_was_enabled" -ne 1 ]; then
 cat <<'EOF'
   Notes for macOS:
-    • Autostart is at LOGIN, not boot (LaunchAgent semantics). For boot-
-      time start without a login, enable auto-login in System Settings →
-      Users & Groups (incompatible with FileVault). Linux's linger is not
-      available on macOS without a LaunchDaemon (out of scope, phase 3).
-    • 'pager doctor' and 'pager status' are OS-aware on this branch —
-      doctor checks the LaunchAgents via launchctl; status is purely
-      tmux-based. No systemctl noise on macOS.
-    • Uninstall:
-        launchctl bootout gui/$(id -u)/com.pager.agent
-        rm ~/Library/LaunchAgents/com.pager.agent.plist
+    * --no-autostart was given. Pager runs only when you type
+      'pager start'. No LaunchAgent, no TCC prompts.
+    * To enable autostart later:  pager autostart enable
+    * Current state:              pager autostart status
+EOF
+else
+cat <<'EOF'
+  Notes for macOS:
+    * Autostart is registered. Pager comes back at every LOGIN.
+      To disable later (sessions you started manually keep running):
+          pager autostart disable
+    * For boot-time start without a login, enable auto-login in
+      System Settings -> Users & Groups (incompatible with FileVault).
+    * macos/README.md has the full table of macOS TCC prompts you'll
+      see on first login and what each one does.
+EOF
+fi
 
-  Re-running this script is safe — it only does work that's missing.
+cat <<'EOF'
+
+  Re-running this script is safe -- only does work that is missing.
+  See `pager help` for the full command surface.
 ──────────────────────────────────────────────────────────────────────
 EOF

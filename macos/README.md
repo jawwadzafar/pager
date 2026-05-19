@@ -51,9 +51,11 @@ On macOS Ventura+ (Tahoe is fine here), the OS shows an informational notificati
 
 If you click into that notification (or open **System Settings → General → Login Items & Extensions**), you'll see `pager` listed under **Allow in the Background**. The toggle defaults to **on**. **Don't turn it off** — that's the macOS-side kill-switch for the LaunchAgents.
 
-### After first login: the permission-prompt storm (don't be scared)
+### After first login on macOS: what the prompts mean
 
-On your first login *after* the bootstrap installs the LaunchAgent, macOS may pop up a stack of permission prompts as the agent fires for the first time. People report seeing as many as 5–7 prompts in quick succession:
+The bootstrap registers a LaunchAgent so pager comes back at every login. **The first time it actually fires (next login after install), macOS will pop up a stack of TCC permission prompts.** This is a **one-time event** — your choices are remembered, every login after that is quiet. The avalanche is the cost of having an unsigned background tool (no Apple Developer ID); same prompts hit Ollama, brew-services entries, every other community CLI.
+
+You'll see something like 5–7 prompts in quick succession. **Most can be denied safely**; only one is actually required:
 
 | Prompt | Safe to click | Why |
 |---|---|---|
@@ -70,6 +72,14 @@ On your first login *after* the bootstrap installs the LaunchAgent, macOS may po
 **What if I clicked Don't Allow on the App Management one (the tmux prompt).** That's the one prompt you DO need to Allow. If you denied it, the watchdog can't talk to the tmux server, can't tell if the session is alive, and will try to restart it in a loop. Fix: **System Settings → Privacy & Security → App Management → toggle `tmux` ON**. Then `launchctl kickstart gui/$(id -u)/com.pager.agent` to fire a fresh watchdog tick.
 
 **If the prompt storm bothers you on every reboot.** Once you Allow / Don't Allow each, the choice is remembered. After your first cleanup pass, future logins should be quiet. The avalanche is a once-per-fresh-install event.
+
+**If you'd rather not deal with the prompts at all.** Install with `--no-autostart`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh -s -- --no-autostart
+```
+
+Pager only runs when you type `pager start` in your Terminal. No LaunchAgent, no prompts. You can flip later with `pager autostart enable`. Tradeoff: you have to re-run `pager start` after every reboot.
 
 ### The "tmux would like to access data from other apps" prompt
 

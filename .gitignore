@@ -48,8 +48,10 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/        # collides with /lib only if you create a Python lib dir at root — harmless otherwise
+# Note: deliberately NOT ignoring lib/ or lib64/ at any level — pager has
+# its own lib/ for shell helpers (lib/sudo.sh, lib/autostart.sh) that
+# must stay tracked. Python virtualenvs use lib/ too, but we already
+# ignore .venv/, venv/, env/, ENV/ which contain the venv-specific lib.
 parts/
 sdist/
 var/
