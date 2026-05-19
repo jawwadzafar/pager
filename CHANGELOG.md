@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-05-19
+
+Contribution surface + safety nets.
+
+### Added
+- **Soft `claude` check** in `install.sh`, `linux/bootstrap.sh`, and `macos/bootstrap.sh`. Prints install instructions (https://claude.com/code, or `npm install -g @anthropic-ai/claude-code`) when Claude Code CLI isn't on PATH. Doesn't hard-fail — the user might have it on a not-yet-loaded PATH, or might want to install pager first and `claude` later.
+- **Linux non-apt detection.** `linux/bootstrap.sh` now detects the user's package manager (dnf, yum, pacman, zypper, apk, emerge, xbps-install) and fails fast with a clear error + named distro family + contribution invite if it's not `apt-get`. No more half-installing on a Fedora box. Today's bootstrap continues to support Debian/Ubuntu/Pop!_OS/Mint/Raspberry Pi OS; other distros are tractable PRs (touch points listed in the error message).
+- **`CODE_OF_CONDUCT.md`** — short pointer to Contributor Covenant 2.1 + a brief description of expectations and reporting.
+- **README "Contributing" section** rewritten with: file-tour table, "Open opportunities" list naming specific PRs that would land cleanly (Linux distros, Homebrew formula, real-time log viewer, etc.), link to CONTRIBUTING.md and CODE_OF_CONDUCT.md.
+- **README badges**: `PRs welcome` (links to CONTRIBUTING.md), `maintained: yes`. Existing badges retained.
+
+### Changed
+- `CONTRIBUTING.md` fully refreshed for the current repo layout (linux/, macos/, lib/autostart.sh, install.sh, the autostart subcommand). Adds explicit guidance about ASCII-only POSIX `sh` files (the v0.5.2 macOS Unicode regression motivated this rule). "Open opportunities" mirrors what's in the README.
+- README tests badge bumped from "20/20" to "23/23" to match the actual smoke-test count.
+
+### Notes
+- No behavior change for existing users; everything in this release is doc + safety net. Re-bootstrapping is safe.
+- Still no GitHub release cut for v0.6.0 or v0.6.1 — those are tagged in git only. v0.5.7 remains "latest" on the GitHub Releases page until the macOS verification on v0.6.x completes.
+
 ## [0.6.0] — 2026-05-19
 
 **`pager autostart` subcommand + cleaner separation of "register the unit" vs "run the install."** Autostart stays on by default (that's the whole pitch — "Claude Code that never sleeps"), but you can now toggle it without re-bootstrapping, opt out at install time, and the docs are honest about the macOS TCC prompt cost.
@@ -452,7 +471,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.1
 [0.6.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.0
 [0.5.7]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.7
 [0.5.6]: https://github.com/jawwadzafar/pager/releases/tag/v0.5.6

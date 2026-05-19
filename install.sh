@@ -55,6 +55,15 @@ if ! command -v git >/dev/null 2>&1; then
   fi
 fi
 
+# -- claude is needed for pager to actually be useful, but we don't hard-fail --
+# It might be installed but not on PATH yet (e.g. just-installed-via-npm and
+# PATH not refreshed). Warn loudly and continue.
+if ! command -v claude >/dev/null 2>&1; then
+  warn "claude (Claude Code CLI) not found on PATH."
+  warn "  Install: https://claude.com/code   (or: npm install -g @anthropic-ai/claude-code)"
+  warn "  pager will install; you'll need claude before 'pager start' will work."
+fi
+
 # -- clone or update --
 if [ -d "$TARGET/.git" ]; then
   log "Existing clone at $TARGET -- fetching latest..."

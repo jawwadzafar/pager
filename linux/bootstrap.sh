@@ -64,6 +64,51 @@ log()  { printf "\n\033[1;36m==>\033[0m %s\n" "$*"; }
 ok()   { printf "    \033[32m✓\033[0m %s\n" "$*"; }
 warn() { printf "    \033[33m!\033[0m %s\n" "$*"; }
 
+# 0. Soft claude check — pager isn't useful without it, but a missing
+# claude binary often means "installed via npm but PATH not refreshed
+# yet" rather than "user actually forgot." Warn and continue.
+if ! command -v claude >/dev/null 2>&1; then
+  warn "claude (Claude Code CLI) not found on PATH."
+  warn "  Install: https://claude.com/code   (or: npm install -g @anthropic-ai/claude-code)"
+  warn "  pager will install; you'll need claude before 'pager start' will work."
+fi
+
+# 0b. Linux distro check — currently we support apt-based distros only.
+# Detect other major package managers and fail clearly with a contribution
+# invite rather than half-installing on a wrong-PM box.
+if ! command -v apt-get >/dev/null 2>&1; then
+  detected="unknown"
+  for pm in dnf yum pacman zypper apk emerge xbps-install; do
+    if command -v "$pm" >/dev/null 2>&1; then detected="$pm"; break; fi
+  done
+  case "$detected" in
+    dnf|yum)            distro_hint="Fedora / RHEL / CentOS family" ;;
+    pacman)             distro_hint="Arch / Manjaro" ;;
+    zypper)             distro_hint="openSUSE" ;;
+    apk)                distro_hint="Alpine" ;;
+    emerge)             distro_hint="Gentoo" ;;
+    xbps-install)       distro_hint="Void Linux" ;;
+    *)                  distro_hint="(no recognized package manager)" ;;
+  esac
+  echo
+  printf '\033[31mERROR:\033[0m pager currently supports apt-based Linux distros only.\n' >&2
+  printf '       Debian, Ubuntu, Pop!_OS, Linux Mint, Raspberry Pi OS — those work.\n' >&2
+  printf '       Detected: %s  (%s)\n' "$detected" "$distro_hint" >&2
+  echo >&2
+  printf 'Adding support for your distro is a tractable PR — see CONTRIBUTING.md.\n' >&2
+  printf 'Touch points:\n' >&2
+  printf '  - linux/bootstrap.sh step 1 (apt-get install ... -> your-pm install ...)\n' >&2
+  printf '  - Package name mapping (python3-yaml -> python3-pyyaml on Fedora, etc.)\n' >&2
+  echo >&2
+  printf 'Workaround for now: install the deps manually\n' >&2
+  printf '  (tmux sshpass python3-yaml openssh-client curl ca-certificates),\n' >&2
+  # shellcheck disable=SC2016  # literal backticks intentional in user-facing message
+  printf '  then run `make install` to symlink the pager binary into PATH.\n' >&2
+  echo >&2
+  printf 'Issue tracker: https://github.com/jawwadzafar/pager/issues\n' >&2
+  exit 1
+fi
+
 # 1. APT PREREQUISITES --------------------------------------------------------
 log "1/10 apt prerequisites"
 $SUDO apt-get update -qq
