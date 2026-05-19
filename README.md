@@ -403,6 +403,12 @@ Open the URL on your phone (signed into the same claude.ai account) — input/ou
 PAGER_NO_REMOTE=1 pager start sandbox
 ```
 
+**To start a session that DOESN'T use `--dangerously-skip-permissions`** (claude will ask before running shell commands; useful for foreground sessions you'll attach to actively, but background autostart may stall on permission prompts):
+```bash
+PAGER_NO_DANGEROUS=1 pager start sandbox
+```
+By default pager passes `--dangerously-skip-permissions` to `claude` because there's no human at the keyboard when the LaunchAgent fires at login. Side effect: claude prints a loud "Bypass Permissions mode" banner at startup — that's expected; see [`macos/README.md`](macos/README.md) for the deeper explanation.
+
 The session **auto-starts on boot** via the user systemd unit `pager.service` (linger enabled). To disable:
 ```bash
 systemctl --user disable --now pager.service

@@ -41,6 +41,33 @@ date_to_epoch() {
   python3 -c "from datetime import datetime; import sys; print(int(datetime.fromisoformat(sys.argv[1]).timestamp()))" "$1" 2>/dev/null || echo 0
 }
 
+# age_seconds_for_pid PID — print integer seconds a process has been alive.
+# `ps -o etimes=` is procps (Linux) only; macOS BSD ps doesn't have it and
+# prints its keyword-help text instead, which polluted age_sec in watch.csv
+# (the v0.6.3 fix). `ps -o etime=` is portable but prints "[[DD-]HH:]MM:SS";
+# we parse it via Python here. Empty output on failure.
+age_seconds_for_pid() {
+  python3 -c '
+import sys, subprocess
+try:
+    out = subprocess.check_output(["ps", "-o", "etime=", "-p", sys.argv[1]]).decode().strip()
+    days = 0
+    if "-" in out:
+        d, out = out.split("-", 1)
+        days = int(d)
+    parts = [int(p) for p in out.split(":")]
+    if len(parts) == 2:
+        secs = parts[0]*60 + parts[1]
+    elif len(parts) == 3:
+        secs = parts[0]*3600 + parts[1]*60 + parts[2]
+    else:
+        secs = 0
+    print(days * 86400 + secs)
+except Exception:
+    pass
+' "$1" 2>/dev/null
+}
+
 # Stop-semaphore — touched by `pager stop`, removed by `pager start`.
 # The watchdog checks for this file BEFORE doing any tmux call and noops if
 # present. Without this, `pager stop` is non-persistent because the watchdog
@@ -76,7 +103,17 @@ cmd_start() {
   # Clear the stop semaphore so the watchdog resumes health checks.
   rm -f "$(_pager_stop_file)" 2>/dev/null || true
 
-  local claude_cmd="claude --dangerously-skip-permissions"
+  # claude is launched with --dangerously-skip-permissions by default. There's
+  # no human at the keyboard when the LaunchAgent fires at login, so without
+  # this flag claude would hang on the first permission prompt. The tradeoff
+  # is that claude prints a loud red warning banner about Bypass Permissions
+  # mode at startup — it's expected, see macos/README.md.
+  # PAGER_NO_DANGEROUS=1 opts out for users who'd rather have prompts +
+  # potential hangs over the warning banner.
+  local claude_cmd="claude"
+  if [ -z "${PAGER_NO_DANGEROUS:-}" ]; then
+    claude_cmd+=" --dangerously-skip-permissions"
+  fi
   if [ -z "${PAGER_NO_REMOTE:-}" ]; then
     claude_cmd+=" --remote-control $(printf '%q' "$session")"
   fi
@@ -519,7 +556,7 @@ cmd_watchdog() {
   fi
   if [ -n "$pgrep_pid" ]; then
     local age_sec_fast=""
-    age_sec_fast="$(ps -o etimes= -p "$pgrep_pid" 2>/dev/null | tr -d ' ' || true)"
+    age_sec_fast="$(age_seconds_for_pid "$pgrep_pid")"
     printf '%s,%s,%s,%s,%s,%s,%s\n' \
       "$ts" "$session" "true" "$pgrep_pid" "true" "${age_sec_fast:-}" "noop" >> "$csv"
     return 0
@@ -548,7 +585,7 @@ cmd_watchdog() {
   fi
 
   if [ -n "$claude_pid" ]; then
-    age_sec="$(ps -o etimes= -p "$claude_pid" 2>/dev/null | tr -d ' ' || true)"
+    age_sec="$(age_seconds_for_pid "$claude_pid")"
   fi
 
   if [ "$tmux_alive" = true ]; then

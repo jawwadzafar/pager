@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] — 2026-05-19
+
+Real-Mac install on a different user (yashwant.singh on a separate box) surfaced two issues. Fixing both.
+
+### Fixed
+- **`watch.csv` was getting corrupted on macOS.** `cmd_watchdog` was using `ps -o etimes=` (with the trailing `s`) to read process age in seconds, which is procps (Linux)-only. macOS BSD `ps` doesn't recognize `etimes` and prints its entire keyword-help text instead. Our `| tr -d ' '` then crammed that into the `age_sec` column of `watch.csv` as one giant token. Functional behavior was unaffected (the `action` field was still correct), but the CSV was unreadable on Mac. **Fix:** new `age_seconds_for_pid` helper that parses portable `ps -o etime=` output ("[[DD-]HH:]MM:SS") via Python. Works on both Linux and macOS, returns clean integers. Both watchdog age-sec call sites updated.
+
+### Added
+- **`PAGER_NO_DANGEROUS=1` env var opt-out** for `--dangerously-skip-permissions`. Default behavior unchanged: pager still launches claude with the flag because background-autostart needs it (no human to respond to permission prompts at login). Users who want claude's normal permission-prompt flow can set the env var. With it set, claude prompts on dangerous operations — fine for interactive sessions you'll attach to, but the watchdog can't answer prompts, so background sessions may stall.
+- Documented the "Bypass Permissions mode" warning banner in macos/README.md. It's loud, it's red, and it's claude's own output (not pager). Explained why we do it + how to opt out.
+
+### Notes
+- 24/24 smoke tests pass.
+- Sanity-tested `age_seconds_for_pid 1` (PID 1, system init) returns a clean positive integer matching system uptime in seconds.
+
 ## [0.6.2] — 2026-05-19
 
 Watchdog + `pager start` now refuse to thrash when claude isn't installed.
@@ -486,7 +501,8 @@ Initial public release.
 - Example hosts use `<box-ip-or-dns>` placeholder rather than any
   IP-looking string, so readers don't mistake an example for a real host.
 
-[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/jawwadzafar/pager/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.3
 [0.6.2]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.2
 [0.6.1]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.1
 [0.6.0]: https://github.com/jawwadzafar/pager/releases/tag/v0.6.0
