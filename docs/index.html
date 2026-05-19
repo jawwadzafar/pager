@@ -6,8 +6,8 @@
 
 <!-- ─── core ─── -->
 <title>pager — persistent Claude Code that never times out, drive it from your phone</title>
-<meta name="description" content="Claude Code in the browser times out, dies on laptop sleep, loses context. pager runs claude --remote-control inside a persistent tmux on your own always-on Linux or Mac — same session, no timeouts, survives reboots, drive it from any phone signed into claude.ai. One-line install, MIT."/>
-<meta name="keywords" content="Claude Code, persistent session, no timeout, always-on, remote control, tmux, Linux, macOS, Mac mini, mobile, phone, SSH alternative, headless, self-hosted"/>
+<meta name="description" content="Claude Code in the browser times out, dies on laptop sleep, loses context. pager runs claude --remote-control inside a persistent session on your own always-on Linux, macOS, or Windows box — same session, no timeouts, survives reboots, drive it from any phone signed into claude.ai. One-line install, MIT."/>
+<meta name="keywords" content="Claude Code, persistent session, no timeout, always-on, remote control, tmux, Linux, macOS, Mac mini, Windows, PowerShell, winget, mobile, phone, SSH alternative, headless, self-hosted"/>
 <meta name="author" content="Jawwad Zafar"/>
 <meta name="theme-color" content="#0fff8a"/>
 <meta name="application-name" content="pager"/>
@@ -25,20 +25,20 @@
 <meta property="og:type" content="website"/>
 <meta property="og:url" content="https://jawwadzafar.github.io/pager/"/>
 <meta property="og:title" content="Claude Code that never sleeps."/>
-<meta property="og:description" content="Persistent claude --remote-control inside a tmux session on your own always-on Linux or Mac. No timeouts. No 'session expired.' No 'reconnect.' Drive it from any phone signed into claude.ai. One-line install. MIT."/>
+<meta property="og:description" content="Persistent claude --remote-control on your own always-on Linux, macOS, or Windows box. No timeouts. No 'session expired.' No 'reconnect.' Drive it from any phone signed into claude.ai. One-line install. MIT."/>
 <meta property="og:image" content="https://jawwadzafar.github.io/pager/og-image.png"/>
 <meta property="og:image:width" content="1200"/>
 <meta property="og:image:height" content="630"/>
-<meta property="og:image:alt" content="pager — Claude Code that never sleeps. Persistent remote sessions on Linux + macOS."/>
+<meta property="og:image:alt" content="pager — Claude Code that never sleeps. Persistent remote sessions on Linux, macOS, and Windows."/>
 <meta property="og:site_name" content="pager"/>
 <meta property="og:locale" content="en_US"/>
 
 <!-- ─── Twitter / X card ─── -->
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:title" content="Claude Code that never sleeps."/>
-<meta name="twitter:description" content="Persistent claude --remote-control inside a tmux session on your own always-on Linux or Mac. No timeouts. Drive it from any phone signed into claude.ai."/>
+<meta name="twitter:description" content="Persistent claude --remote-control on your own always-on Linux, macOS, or Windows box. No timeouts. Drive it from any phone signed into claude.ai."/>
 <meta name="twitter:image" content="https://jawwadzafar.github.io/pager/og-image.png"/>
-<meta name="twitter:image:alt" content="pager — Claude Code that never sleeps. Persistent remote sessions on Linux + macOS."/>
+<meta name="twitter:image:alt" content="pager — Claude Code that never sleeps. Persistent remote sessions on Linux, macOS, and Windows."/>
 
 <!-- ─── structured data: SoftwareApplication ─── -->
 <script type="application/ld+json">
@@ -46,11 +46,11 @@
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "pager",
-  "description": "Turn any always-on Linux or macOS machine into a remote-controllable Claude Code rig. Background tmux + claude --remote-control, driven from your phone.",
+  "description": "Turn any always-on Linux, macOS, or Windows machine into a remote-controllable Claude Code rig. Background session + claude --remote-control, driven from your phone.",
   "url": "https://jawwadzafar.github.io/pager/",
   "image": "https://jawwadzafar.github.io/pager/og-image.png",
   "applicationCategory": "DeveloperApplication",
-  "operatingSystem": "Linux, macOS",
+  "operatingSystem": "Linux, macOS, Windows",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "license": "https://opensource.org/licenses/MIT",
   "author": { "@type": "Person", "name": "Jawwad Zafar" },
@@ -114,7 +114,7 @@
     <a class="btn" href="#walkthrough">How it works</a>
   </div>
 
-  <p class="meta">MIT · Bash · works on Linux (systemd) and macOS (launchd, Tahoe&nbsp;26 / Sequoia&nbsp;15)</p>
+  <p class="meta">MIT &middot; works on Linux (systemd), macOS (launchd, Tahoe&nbsp;26 / Sequoia&nbsp;15), and Windows (Scheduled Tasks, Win10/11) &mdash; native, no WSL</p>
 
   <picture class="flow-illustration">
     <source media="(prefers-color-scheme: dark)" srcset="flow-dark.svg"/>
@@ -139,7 +139,8 @@
     <li>
       <strong>Install on your machine (once).</strong>
       <code class="block">curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh</code>
-      One command. Detects Linux vs macOS, installs deps via <code>apt</code> or <code>brew</code>, wires the shell, registers the service or LaunchAgent. A tmux session named <code>claude</code> is already running <code>claude --remote-control</code> when it finishes.
+      <code class="block">irm https://raw.githubusercontent.com/jawwadzafar/pager/main/install.ps1 | iex   <span class="dim"># Windows (alpha)</span></code>
+      One command. On Linux/macOS it detects the OS and installs deps via <code>apt</code> or <code>brew</code>; on Windows it pulls Git/OpenSSH/Python via <code>winget</code>. Wires the shell, registers the service / LaunchAgent / Scheduled Task. A background <code>claude --remote-control</code> session is already running when it finishes.
     </li>
     <li>
       <strong>Get the URL.</strong>
@@ -164,8 +165,8 @@
       <p>Idempotent <code>bootstrap.sh</code> (Linux, <code>apt</code>) or <code>macos/bootstrap.sh</code> (macOS, <code>brew</code>). Prereqs, env, PATH, Claude Code trust flag, service or LaunchAgent, watchdog. Re-run anytime; only fixes what's missing.</p>
     </article>
     <article>
-      <h3>Linux + macOS</h3>
-      <p>Native on both. Linux uses <code>systemd --user</code> with <code>loginctl enable-linger</code> for boot-time start. macOS uses LaunchAgents that start at login (Tahoe&nbsp;26 / Sequoia&nbsp;15, Apple Silicon and Intel both). Same single <code>bin/pager</code> binary either way — it detects the OS at runtime.</p>
+      <h3>Linux + macOS + Windows</h3>
+      <p>Native on all three. Linux uses <code>systemd --user</code> with <code>loginctl enable-linger</code> for boot-time start. macOS uses LaunchAgents at login (Tahoe&nbsp;26 / Sequoia&nbsp;15, Apple Silicon and Intel). Windows (alpha) uses a logon-triggered Scheduled Task with battery-resilient settings (Win10/11, PowerShell 5.1+, no WSL). One <code>bin/pager</code> (bash) for Linux/Mac, one <code>bin/pager.ps1</code> for Windows &mdash; identical command surface.</p>
     </article>
     <article>
       <h3>Survives reboots</h3>
@@ -230,11 +231,17 @@
   <h2>Install</h2>
 
   <div class="install-block install-block-hero" data-os="any">
+    <span class="os-tag os-tag-any">Linux + macOS</span>
     <span class="prompt">$</span><code class="install-line">curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh | sh</code>
-    <button class="copy" data-target="[data-os='any'] .install-line" aria-label="Copy install command">copy</button>
+    <button class="copy" data-target="#install [data-os='any'] .install-line" aria-label="Copy install command">copy</button>
+  </div>
+  <div class="install-block install-block-hero" data-os="windows">
+    <span class="os-tag os-tag-win">Windows <small>(alpha)</small></span>
+    <span class="prompt">PS&gt;</span><code class="install-line">irm https://raw.githubusercontent.com/jawwadzafar/pager/main/install.ps1 | iex</code>
+    <button class="copy" data-target="#install [data-os='windows'] .install-line" aria-label="Copy Windows install command">copy</button>
   </div>
 
-  <p class="install-sub-large">One command for both platforms. Detects Linux vs macOS, requires only <code>git</code>, clones the repo into <code>~/.pager</code>, runs the right platform bootstrap. <strong>Idempotent</strong> — re-run any time to update.</p>
+  <p class="install-sub-large">One command per platform. Requires only <code>git</code> (or <code>winget</code> on Windows, which the installer can pull Git through). Clones into <code>~/.pager</code> on Linux/Mac or <code>%USERPROFILE%\.pager</code> on Windows, then runs the right platform bootstrap. <strong>Idempotent</strong> &mdash; re-run any time to update.</p>
 
   <div class="os-grid">
     <article class="os-card">
@@ -266,7 +273,7 @@
 
   <ol class="install-steps">
     <li>
-      <p>Open a new shell (or <code>source ~/.bashrc</code> on Linux / <code>source ~/.zprofile</code> on macOS), then:</p>
+      <p>Open a new shell &mdash; <code>source ~/.bashrc</code> on Linux, <code>source ~/.zprofile</code> on macOS, or a fresh PowerShell window on Windows so <code>$PROFILE</code> reloads &mdash; then:</p>
       <code class="block">pager doctor   <span class="dim"># everything green?</span>
 pager url      <span class="dim"># phone URL</span></code>
     </li>
@@ -277,16 +284,29 @@ pager url      <span class="dim"># phone URL</span></code>
 
   <h3 class="install-h3">Or, the manual way</h3>
 
+  <p class="dim" style="margin: 4px 0 8px 0;">Linux &amp; macOS:</p>
   <pre><code><span class="t-prompt">$</span> git clone https://github.com/jawwadzafar/pager.git ~/.pager
 <span class="t-prompt">$</span> cd ~/.pager
 <span class="t-prompt">$</span> ./install.sh                <span class="t-dim"># same auto-detect</span>
 <span class="t-prompt">$</span> ./linux/bootstrap.sh        <span class="t-dim"># or, explicitly</span>
 <span class="t-prompt">$</span> ./macos/bootstrap.sh</code></pre>
 
+  <p class="dim" style="margin: 12px 0 8px 0;">Windows (PowerShell):</p>
+  <pre><code><span class="t-prompt">PS&gt;</span> git clone https://github.com/jawwadzafar/pager.git $env:USERPROFILE\.pager
+<span class="t-prompt">PS&gt;</span> cd $env:USERPROFILE\.pager
+<span class="t-prompt">PS&gt;</span> .\windows\bootstrap.ps1     <span class="t-dim"># add -NoAutostart to skip the Scheduled Task</span></code></pre>
+
   <h3 class="install-h3">Uninstall</h3>
 
+  <p class="dim" style="margin: 4px 0 8px 0;">Linux &amp; macOS:</p>
   <pre><code><span class="t-prompt">$</span> pager uninstall          <span class="t-dim"># stops the service/LaunchAgent, removes the symlink + shell-rc lines</span>
 <span class="t-prompt">$</span> rm -rf ~/.pager          <span class="t-dim"># optional: final wipe of the repo + logs + .env</span></code></pre>
+
+  <p class="dim" style="margin: 12px 0 8px 0;">Windows:</p>
+  <pre><code><span class="t-prompt">PS&gt;</span> pager uninstall                                       <span class="t-dim"># Scheduled Task + $PROFILE block</span>
+<span class="t-prompt">PS&gt;</span> Remove-Item -Recurse -Force $env:USERPROFILE\.pager   <span class="t-dim"># optional: final wipe</span></code></pre>
+
+  <p class="install-sub-large" style="margin-top: 12px;"><code>pager uninstall</code> is non-destructive: tears down system integration but never touches <code>.env</code> or the repo. Add <code>-y</code> to skip the prompt.</p>
 
   <p class="footer-cta">
     Full CLI reference, design notes, and deeper docs live in the
