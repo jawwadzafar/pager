@@ -111,7 +111,7 @@ irm https://raw.githubusercontent.com/jawwadzafar/pager/main/install.ps1 | iex
 
 Detects your OS, checks you have `git`, clones `pager` into `~/.pager` (or `$env:USERPROFILE\.pager` on Windows), installs deps (apt on Linux, brew on macOS, winget on Windows), wires your shell, **and registers the session to come back at every login**. On macOS that means a LaunchAgent; on Linux a systemd `--user` unit; on Windows a Scheduled Task triggered at logon. **First login after install on macOS triggers a one-time stack of TCC permission prompts** — see [`macos/README.md`](macos/README.md#after-first-login-on-macos-what-the-prompts-mean) for what's safe to deny (most of them). **Idempotent** — re-run any time to update.
 
-> **Windows is alpha.** Pure-PowerShell native install, no WSL. `pager attach` is replaced by `pager logs` (read-only tail) because Windows has no tmux equivalent in `pager` yet. Everything else (start/stop/status/url/trust/autostart/uninstall/doctor/info) works the same. Full Windows install/uninstall/troubleshooting in [`windows/README.md`](windows/README.md).
+> **Windows is alpha and a deliberate subset of the Linux/macOS feature set.** Pure-PowerShell native install, no WSL. The 80%-use case (start, get phone URL, autostart at login) is fully supported; `attach`, `watchdog`, `ssh`, and `run` are not — see [`FEATURE-PARITY.md`](FEATURE-PARITY.md) for the full matrix. Full Windows install/uninstall/troubleshooting in [`windows/README.md`](windows/README.md).
 
 ### Don't want autostart?
 
