@@ -181,7 +181,7 @@ curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh |
 | Watchdog | every-60-second user-timer / launchd watch agent that restarts dead sessions and writes `watch.csv` | Scheduled Task's built-in `RestartInterval=2min, RestartCount=3` is the only restart-on-crash for now |
 | `pager kill` semantics | hard-kill, ignores the `.stopped` semaphore the watchdog respects | alias for `pager stop` (no watchdog, so no semaphore needed) |
 | `pager ssh` inventory | full `yaml`-driven SSH multiplexer | not ported yet — Python + pyyaml are installed so it's a small follow-up |
-| `pager doctor --fix` | safe auto-fixes for common problems | not ported yet — `pager doctor` reports state only |
+| `pager doctor --fix` | safe auto-fixes for common problems | runs `pager trust --repair` then re-reports state |
 
 **For full PTY-based attach**, install WSL2 and run the Linux installer there
 instead. That gets you the bash `bin/pager`, tmux, the watchdog, and full

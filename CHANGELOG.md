@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0-alpha-4] — 2026-05-20
+
+Fourth alpha: closes the workspace-trust hole on Windows. Three compounding
+bugs were silently breaking trust pre-acceptance on every install; this
+release fixes all three and adds a single canonical repair command.
+
+### Found
+
+- **`Invoke-PagerTrust` splatted paths as character arrays.** A single-element
+  `$paths | ForEach-Object` pipeline unwraps to a scalar string in PowerShell;
+  `@$normalized` then splatted that string into Python's `sys.argv` one
+  character at a time. Visible in `~/.claude.json` as one trust entry per
+  character of the path (`"C"`, `":"`, `"\\"`, `"U"`, `"s"`...). Discovered
+  by inspecting a "fixed" install that still showed not-trusted.
+- **Path-form mismatch.** Bootstrap step 5 and `Invoke-PagerTrust` wrote with
+  backslashes (`C:\Users\Foo`); claude itself stores projects with forward
+  slashes (`C:/Users/Foo`). Our entries were sibling-ignored.
+- **Duplicate-key race in claude's own object.** Claude appends
+  `"hasTrustDialogAccepted": false` to its project entry during init. JSON
+  spec: later value wins. Even with our pre-set `true` at the top of the
+  same object, the doctor would correctly report not-trusted.
+
+### Added
+
+- **`pager trust --repair`** — canonical fix. Purges single-char garbage
+  entries under `projects`, matches existing entries by normalized (forward-
+  slash + lowercase) path, force-sets both trust flags to true, and round-
+  trips through `json.load`/`json.dump` so duplicate keys collapse to a
+  single value. Idempotent. Works against any prior damaged state.
+- **`pager doctor --fix`** — runs `pager trust --repair` then re-runs the
+  checks. Previously a no-op on Windows.
+- **`pager doctor` new checks** — surfaces `duplicate hasTrustDialogAccepted
+  key(s)` and `legacy single-char projects keys`, both with the explicit
+  fix hint `pager trust --repair`.
+
+### Changed
+
+- **`bootstrap.ps1` step 5** — delegates to `pager trust --repair` instead of
+  inlining its own Python. One source of truth for the canonical trust write.
+- **Step 5b (`PAGER_TRUST_PATHS`)** — same delegation.
+- **`pager start`** — after the 2.5s liveness check, sleeps another 4s and
+  re-runs `Repair-PagerTrust` for `$Cwd`. Without this, claude's late
+  `false` write would beat our pre-launch `true` in `~/.claude.json`.
+- **`pager trust` (bare set)** — now also routes through `Repair-PagerTrust`,
+  so every set call cleans up garbage and normalizes path form. No more
+  divergence between "what bootstrap writes" and "what an interactive
+  `pager trust` writes".
+
+### Fixed
+
+- **Splat-as-chars bug** — `@($paths | ForEach-Object {...})` wraps in array
+  context throughout `Invoke-PagerTrust` so single-path calls no longer
+  fragment.
+- **Path normalization** — both reads (`Get-TrustState`) and writes
+  (`Repair-PagerTrust`, `Invoke-PagerTrust`) compare via
+  `path.replace('\\', '/').lower()`, so backslash legacy entries match
+  correctly during check/reset/repair.
+
 ## [0.7.0-alpha-3] — 2026-05-19
 
 Third alpha: actually run claude in the background on Windows-native, with no
