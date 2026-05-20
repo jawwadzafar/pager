@@ -174,14 +174,19 @@ curl -fsSL https://raw.githubusercontent.com/jawwadzafar/pager/main/install.sh |
 
 ## Honest deviations from Linux / macOS
 
+Windows is a deliberate subset of the bash `bin/pager` feature set. The full
+matrix lives in [`FEATURE-PARITY.md`](../FEATURE-PARITY.md) at the repo root;
+quick summary of what's degraded or missing on Windows:
+
 | Feature | Linux / macOS | Windows |
 |---|---|---|
-| Persistent terminal session | tmux | `Start-Process -WindowStyle Hidden`, stdout/stderr redirected to `logs\<name>.log`/`.err`, PID tracked in `logs\<name>.pid` |
-| Attach | `pager attach` (full PTY via tmux) | `pager logs` — **read-only** tail of the log file |
-| Watchdog | every-60-second user-timer / launchd watch agent that restarts dead sessions and writes `watch.csv` | Scheduled Task's built-in `RestartInterval=2min, RestartCount=3` is the only restart-on-crash for now |
-| `pager kill` semantics | hard-kill, ignores the `.stopped` semaphore the watchdog respects | alias for `pager stop` (no watchdog, so no semaphore needed) |
-| `pager ssh` inventory | full `yaml`-driven SSH multiplexer | not ported yet — Python + pyyaml are installed so it's a small follow-up |
-| `pager doctor --fix` | safe auto-fixes for common problems | runs `pager trust --repair` then re-reports state |
+| Persistent terminal session | tmux | `Start-Process -WindowStyle Hidden` (real TTY, no UI, no log capture) |
+| Attach | `pager attach` (full PTY via tmux) | not supported — use `pager logs` (read-only) or WSL2 |
+| Watchdog | 60s user-timer / launchd watch agent + `watch.csv` | Scheduled Task `RestartInterval=2min, RestartCount=3` only |
+| `pager kill` semantics | hard-kill, watchdog respawns | alias for `pager stop` (no watchdog) |
+| `pager restart` | ✓ | not implemented — `pager stop && pager start` |
+| `pager ssh` / `pager run` | ✓ inventory-driven SSH | not ported |
+| `pager doctor --fix` | broad auto-fix (linger, trust, perms, units) | currently only runs `pager trust --repair` |
 
 **For full PTY-based attach**, install WSL2 and run the Linux installer there
 instead. That gets you the bash `bin/pager`, tmux, the watchdog, and full
