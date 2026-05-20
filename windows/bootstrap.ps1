@@ -147,31 +147,24 @@ function pager {{ & "{0}\bin\pager.ps1" @args }}
 }
 
 # --- 5. claude.json trust -------------------------------------------------
+# Delegates to `pager trust --repair`, which is the single source of truth
+# for ~/.claude.json's projects state: stores forward-slash keys (matching
+# claude's own format), collapses duplicate `hasTrustDialogAccepted` entries,
+# and purges legacy single-char garbage from the splat-as-chars bug.
 Log "5/7 Claude Code workspace trust"
-$claudeJson = "$env:USERPROFILE\.claude.json"
 if ($pythonExe) {
-    $trustScript = @'
-import json, os, sys
-p = os.path.expanduser('~/.claude.json')
-d = {}
-if os.path.exists(p):
-    try:
-        with open(p) as f: d = json.load(f)
-    except Exception:
-        d = {}
-home = os.path.expanduser('~')
-projects = d.setdefault('projects', {})
-proj = projects.setdefault(home, {})
-proj['hasTrustDialogAccepted'] = True
-proj['hasCompletedProjectOnboarding'] = True
-with open(p, 'w') as f: json.dump(d, f, indent=2)
-print('OK')
-'@
-    $result = & $pythonExe -c $trustScript 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Ok "Pre-trusted `$env:USERPROFILE in $claudeJson"
-    } else {
-        Warn "Couldn't update $claudeJson : $result"
+    $repairOutput = & $PagerBin trust --repair 2>&1
+    foreach ($line in $repairOutput) {
+        $s = "$line"
+        if ($s -match '^TRUSTED:\s*(.+)$') {
+            Ok "pre-trusted $($Matches[1])"
+        } elseif ($s -match '^Removed ') {
+            Warn $s
+        } elseif ($s -match '^\(no changes\)') {
+            Ok "already pre-trusted"
+        } elseif ($s) {
+            Write-Host "    $s" -ForegroundColor DarkGray
+        }
     }
 } else {
     Warn "python not found -- can't pre-trust. Claude will show its trust dialog on first run."
@@ -183,28 +176,13 @@ print('OK')
 # it's the natural Windows PATH separator.
 if ($pythonExe -and $env:PAGER_TRUST_PATHS) {
     Log "5b/7 PAGER_TRUST_PATHS extra trust"
-    $extra = $env:PAGER_TRUST_PATHS -split '[;:]' | Where-Object { $_ -ne "" }
+    $extra = @($env:PAGER_TRUST_PATHS -split '[;:]' | Where-Object { $_ -ne "" })
     if ($extra.Count -gt 0) {
-        $trustExtraScript = @'
-import json, os, sys
-p = os.path.expanduser('~/.claude.json')
-d = {}
-if os.path.exists(p):
-    try:
-        with open(p) as f: d = json.load(f)
-    except Exception:
-        d = {}
-projects = d.setdefault('projects', {})
-for raw in sys.argv[1:]:
-    path = os.path.expandvars(os.path.expanduser(raw))
-    e = projects.setdefault(path, {})
-    e['hasTrustDialogAccepted'] = True
-    e['hasCompletedProjectOnboarding'] = True
-    print(f'TRUSTED: {path}')
-with open(p, 'w') as f: json.dump(d, f, indent=2)
-'@
-        $result = & $pythonExe -c $trustExtraScript @extra 2>&1
-        $result | ForEach-Object { Ok "$_" }
+        $extraOutput = & $PagerBin trust --repair @extra 2>&1
+        foreach ($line in $extraOutput) {
+            $s = "$line"
+            if ($s -match '^TRUSTED:\s*(.+)$') { Ok "pre-trusted $($Matches[1])" }
+        }
     } else {
         Warn "PAGER_TRUST_PATHS is set but parsed empty"
     }

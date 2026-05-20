@@ -45,11 +45,24 @@ function Get-PythonExe {
     return $null
 }
 
-# Read trust state from ~/.claude.json via Python (which doesn't choke on the
-# duplicate-key JSON shapes claude sometimes writes -- PS 5.1 ConvertFrom-Json
-# does, and PS7's -AsHashtable isn't available on 5.1).
-# Returns @{ ok = $true; paths = @(...); home = $bool } on success,
-#         @{ ok = $false; error = "..." } on failure.
+# Read trust state from ~/.claude.json via Python.
+#
+# Returns @{ ok = $true; paths = @(...); home = $bool; dupes = $int;
+#            short_keys = $int }                                  on success,
+#         @{ ok = $false; error = "..." }                         on failure.
+#
+# Path matching is forward-slash + lowercase normalized: claude writes its own
+# project keys with forward slashes (e.g. "C:/Users/Foo"), while a naive
+# `os.path.expanduser('~')` on Windows returns backslashes. We compare
+# normalized so the home check works either way.
+#
+# `dupes` is the count of duplicate `hasTrustDialogAccepted` keys inside the
+# same JSON object (claude appends one during init, beating our pre-set value
+# in the duplicate-key race per JSON spec).
+#
+# `short_keys` is the count of `projects` keys shorter than a real path -- the
+# fingerprint of the legacy splat-as-chars bug that wrote one entry per
+# character of the path.
 function Get-TrustState {
     $claudeJson = "$env:USERPROFILE\.claude.json"
     if (-not (Test-Path $claudeJson)) {
@@ -62,22 +75,38 @@ function Get-TrustState {
     $script = @'
 import json, os, sys
 p = os.path.expanduser('~/.claude.json')
+dupes = [0]
+def hook(pairs):
+    seen = set()
+    for k, _ in pairs:
+        if k in seen and k == 'hasTrustDialogAccepted':
+            dupes[0] += 1
+        seen.add(k)
+    return dict(pairs)
 try:
-    with open(p) as f: d = json.load(f)
+    with open(p) as f:
+        d = json.load(f, object_pairs_hook=hook)
 except Exception as e:
     print('__ERROR__:' + str(e))
     sys.exit(0)
-home = os.path.expanduser('~')
+home = os.environ.get('USERPROFILE') or os.path.expanduser('~')
+home_norm = home.replace('\\', '/').lower()
 projects = d.get('projects') or {}
 home_ok = False
 trusted = []
+short_keys = 0
 for path, entry in projects.items():
+    if len(path) < 4:
+        short_keys += 1
+        continue
     if not isinstance(entry, dict): continue
     if entry.get('hasTrustDialogAccepted') and entry.get('hasCompletedProjectOnboarding'):
         trusted.append(path)
-        if path == home:
+        if path.replace('\\', '/').lower() == home_norm:
             home_ok = True
 print('__HOME__:' + ('1' if home_ok else '0'))
+print('__DUPES__:' + str(dupes[0]))
+print('__SHORT__:' + str(short_keys))
 for t in sorted(trusted):
     print(t)
 '@
@@ -87,13 +116,100 @@ for t in sorted(trusted):
         return @{ ok = $false; error = ($lines[0] -replace "^__ERROR__:","") }
     }
     $homeOk = $false
+    $dupes = 0
+    $shortKeys = 0
     $paths = New-Object System.Collections.Generic.List[string]
     foreach ($l in $lines) {
         if ($l -match "^__HOME__:1") { $homeOk = $true; continue }
         if ($l -match "^__HOME__:0") { $homeOk = $false; continue }
+        if ($l -match "^__DUPES__:(\d+)$") { $dupes = [int]$Matches[1]; continue }
+        if ($l -match "^__SHORT__:(\d+)$") { $shortKeys = [int]$Matches[1]; continue }
         if ($l) { $paths.Add($l) | Out-Null }
     }
-    return @{ ok = $true; home = $homeOk; paths = $paths.ToArray() }
+    return @{
+        ok = $true
+        home = $homeOk
+        paths = $paths.ToArray()
+        dupes = $dupes
+        short_keys = $shortKeys
+    }
+}
+
+# Canonical fix for the three Windows trust-state gotchas:
+#   1. Legacy splat-as-chars damage: single-char keys under `projects`
+#      (e.g. "C", ":", "\\", "U", "s"...) written by old `pager trust`.
+#   2. Path-form mismatch: claude writes forward-slash keys; backslash
+#      entries are sibling-ignored.
+#   3. Duplicate `hasTrustDialogAccepted` keys within a single object
+#      (claude appends `false` after init; last value wins per JSON spec).
+#
+# Round-tripping through json.load -> json.dump collapses duplicate keys
+# (the loader keeps the last value, the dumper writes each key exactly once),
+# so the explicit `True` write that follows wins cleanly.
+#
+# Idempotent. Returns @{ ok = $true; touched = @(...); removed = @(...) }
+#                  or @{ ok = $false; error = "..." }.
+function Repair-PagerTrust {
+    param([string[]]$ExtraPaths = @())
+    $py = Get-PythonExe
+    if (-not $py) {
+        return @{ ok = $false; error = "python not available" }
+    }
+    $script = @'
+import json, os, sys
+p = os.path.expanduser('~/.claude.json')
+if not os.path.exists(p):
+    d = {}
+else:
+    with open(p) as f:
+        d = json.load(f)
+projects = d.setdefault('projects', {})
+
+removed = []
+for k in list(projects):
+    if len(k) < 4:
+        removed.append(k); del projects[k]
+
+home = os.environ.get('USERPROFILE') or os.path.expanduser('~')
+targets = [home] + sys.argv[1:]
+
+def normkey(s):
+    return s.replace('\\', '/').lower()
+
+touched = []
+for t in targets:
+    t_norm = normkey(t)
+    matched = [k for k in projects if normkey(k) == t_norm]
+    if not matched:
+        key = t.replace('\\', '/')  # store in claude's expected form
+        projects[key] = {}
+        matched = [key]
+    for k in matched:
+        projects[k]['hasTrustDialogAccepted'] = True
+        projects[k]['hasCompletedProjectOnboarding'] = True
+        touched.append(k)
+
+with open(p, 'w') as f:
+    json.dump(d, f, indent=2)
+print('__REMOVED__:' + '|'.join(removed))
+print('__TOUCHED__:' + '|'.join(sorted(set(touched))))
+'@
+    # Force array context so a single-element call doesn't get splatted
+    # one character at a time (the bug we're fixing).
+    $splatPaths = @($ExtraPaths)
+    $captured = & $py -c $script @splatPaths 2>&1
+    $lines = @($captured | ForEach-Object { "$_" })
+    $removed = @()
+    $touched = @()
+    foreach ($l in $lines) {
+        if ($l -match '^__REMOVED__:(.*)$') {
+            $removed = @($Matches[1] -split '\|' | Where-Object { $_ })
+        }
+        if ($l -match '^__TOUCHED__:(.*)$') {
+            $touched = @($Matches[1] -split '\|' | Where-Object { $_ })
+        }
+    }
+    return @{ ok = $true; touched = $touched; removed = $removed }
 }
 
 function Get-PagerProcesses {
@@ -148,11 +264,11 @@ function Show-Help {
     Write-Host "  autostart disable         remove Scheduled Task"
     Write-Host ""
     Write-Host "Trust"
-    Write-Host "  trust [--check|--reset] [PATH ...]   pre-accept claude's Trust dialog"
+    Write-Host "  trust [--check|--reset|--repair] [PATH ...]   pre-accept claude's Trust dialog"
     Write-Host ""
     Write-Host "Other"
     Write-Host "  info                      full state summary"
-    Write-Host "  doctor                    health check"
+    Write-Host "  doctor [--fix]            health check (--fix runs 'trust --repair' first)"
     Write-Host "  uninstall [-y]            tear down pager (keeps repo + .env)"
     Write-Host "  help                      this message"
     Write-Host ""
@@ -241,6 +357,13 @@ function Invoke-PagerStart {
         Remove-Item -Path $pidPath -ErrorAction SilentlyContinue
         exit 1
     }
+
+    # Claude rewrites its own project entry in ~/.claude.json during init and
+    # appends `hasTrustDialogAccepted: false`. JSON spec: later value wins, so
+    # without a re-stamp our pre-launch `true` loses. Sleep 4s to let claude
+    # finish its first write, then repair the entry.
+    Start-Sleep -Milliseconds 4000
+    $null = Repair-PagerTrust -ExtraPaths @($Cwd)
 
     Write-Host "Started session '$Session'."
     Write-Host "  PID:    $($proc.Id)"
@@ -460,21 +583,55 @@ function Invoke-PagerTrust {
     $mode = "set"
     $paths = New-Object System.Collections.Generic.List[string]
     foreach ($a in $Argv) {
-        if ($a -eq "--check") { $mode = "check"; continue }
-        if ($a -eq "--reset") { $mode = "reset"; continue }
+        if ($a -eq "--check")  { $mode = "check"; continue }
+        if ($a -eq "--reset")  { $mode = "reset"; continue }
+        if ($a -eq "--repair") { $mode = "repair"; continue }
         if ($a -eq "-h" -or $a -eq "--help") {
-            Write-Host "Usage: pager trust [--check|--reset] [PATH ...]"
+            Write-Host "Usage: pager trust [--check|--reset|--repair] [PATH ...]"
             Write-Host "  Pre-accept Claude Code's `"Trust this folder?`" dialog for PATH(s)."
             Write-Host "  Default PATH is `$env:USERPROFILE."
+            Write-Host "  --check    report TRUSTED / NOT TRUSTED for each path (exit 1 if any missing)"
+            Write-Host "  --reset    remove the trust entry for each path"
+            Write-Host "  --repair   scrub legacy garbage + force trust=true + dedupe ~/.claude.json"
             return
         }
         $paths.Add($a) | Out-Null
     }
-    if ($paths.Count -eq 0) { $paths.Add($env:USERPROFILE) | Out-Null }
-    # Normalize to absolute where possible.
-    $normalized = $paths | ForEach-Object {
-        if (Test-Path $_) { (Resolve-Path -Path $_).Path } else { $_ }
+
+    # `set` and `--repair` both safely upsert. Route both through
+    # Repair-PagerTrust so we get garbage cleanup + path-form normalization +
+    # duplicate-key collapse on every set, not just on explicit --repair.
+    if ($mode -eq "set" -or $mode -eq "repair") {
+        $extras = @($paths.ToArray())
+        $result = Repair-PagerTrust -ExtraPaths $extras
+        if (-not $result.ok) {
+            Write-Host "ERROR: $($result.error)" -ForegroundColor Red
+            exit 1
+        }
+        if ($result.removed.Count -gt 0) {
+            Write-Host "Removed $($result.removed.Count) legacy garbage entries from projects:" -ForegroundColor Yellow
+            foreach ($r in $result.removed) {
+                Write-Host "  - $r" -ForegroundColor DarkYellow
+            }
+        }
+        if ($result.touched.Count -gt 0) {
+            foreach ($t in $result.touched) {
+                Write-Host "TRUSTED:     $t" -ForegroundColor Green
+            }
+        } elseif ($result.removed.Count -eq 0) {
+            Write-Host "(no changes)" -ForegroundColor DarkGray
+        }
+        return
     }
+
+    # check + reset: explicit list. Force array context so a single-element
+    # pipeline doesn't unwrap to a scalar string (the splat-as-chars bug).
+    if ($paths.Count -eq 0) { $paths.Add($env:USERPROFILE) | Out-Null }
+    $normalized = @($paths | ForEach-Object {
+        $resolved = if (Test-Path $_) { (Resolve-Path -Path $_).Path } else { $_ }
+        # Forward slashes match claude's stored form.
+        $resolved -replace '\\', '/'
+    })
 
     $py = Get-PythonExe
     if (-not $py) {
@@ -493,34 +650,33 @@ if os.path.exists(p):
     except Exception:
         d = {}
 projects = d.setdefault('projects', {})
+
+def normkey(s):
+    return s.replace('\\', '/').lower()
+
 any_failed = False
 dirty = False
 for target in targets:
-    e = projects.get(target, {})
-    trusted = bool(e.get('hasTrustDialogAccepted'))
-    onboard = bool(e.get('hasCompletedProjectOnboarding'))
+    t_norm = normkey(target)
+    matched = [k for k in projects if normkey(k) == t_norm]
     if mode == 'check':
-        if trusted and onboard:
+        ok = bool(matched) and all(
+            projects[k].get('hasTrustDialogAccepted') and projects[k].get('hasCompletedProjectOnboarding')
+            for k in matched
+        )
+        if ok:
             print(f'TRUSTED:     {target}')
         else:
             print(f'NOT TRUSTED: {target}')
             any_failed = True
     elif mode == 'reset':
-        if target in projects:
-            del projects[target]
+        if matched:
+            for k in matched:
+                del projects[k]
             dirty = True
             print(f'RESET:       {target}')
         else:
             print(f'NOOP:        {target}')
-    else:
-        if trusted and onboard:
-            print(f'ALREADY:     {target}')
-        else:
-            e['hasTrustDialogAccepted'] = True
-            e['hasCompletedProjectOnboarding'] = True
-            projects[target] = e
-            dirty = True
-            print(f'TRUSTED:     {target}')
 if dirty:
     with open(p, 'w') as f: json.dump(d, f, indent=2)
 sys.exit(1 if any_failed else 0)
@@ -719,10 +875,37 @@ function Invoke-PagerInfo {
 }
 
 function Invoke-PagerDoctor {
+    param([switch]$Fix)
+
     Write-Host ""
-    Write-Host "pager doctor" -ForegroundColor White -NoNewline
+    if ($Fix) {
+        Write-Host "pager doctor --fix" -ForegroundColor White -NoNewline
+    } else {
+        Write-Host "pager doctor" -ForegroundColor White -NoNewline
+    }
     Write-Host "   $PagerRoot" -ForegroundColor DarkGray
     Write-Host ""
+
+    if ($Fix) {
+        Write-Host "Repairing trust state..." -ForegroundColor Cyan
+        $r = Repair-PagerTrust
+        if ($r.ok) {
+            if ($r.removed.Count -gt 0) {
+                Write-Host "  removed $($r.removed.Count) legacy garbage projects entries" -ForegroundColor Yellow
+            }
+            foreach ($t in $r.touched) {
+                Write-Host "  trusted: $t" -ForegroundColor Green
+            }
+            if ($r.removed.Count -eq 0 -and $r.touched.Count -eq 0) {
+                Write-Host "  (nothing to repair)" -ForegroundColor DarkGray
+            }
+        } else {
+            Write-Host "  trust repair failed: $($r.error)" -ForegroundColor Red
+        }
+        Write-Host ""
+        Write-Host "Re-running checks..." -ForegroundColor Cyan
+        Write-Host ""
+    }
 
     # Use a hashtable so nested helper functions can mutate counters without
     # running into PowerShell's $script: vs local scope gotcha (the previous
@@ -753,9 +936,15 @@ function Invoke-PagerDoctor {
     $trust = Get-TrustState
     if ($trust.ok) {
         if ($trust.home) { & $Pass "`$env:USERPROFILE pre-trusted" }
-        else { & $Warn "`$env:USERPROFILE not trusted" "pager trust" }
+        else { & $Warn "`$env:USERPROFILE not trusted" "pager trust --repair" }
+        if ($trust.dupes -gt 0) {
+            & $Warn "duplicate hasTrustDialogAccepted key(s) in ~/.claude.json: $($trust.dupes)" "pager trust --repair"
+        }
+        if ($trust.short_keys -gt 0) {
+            & $Warn "legacy single-char projects keys: $($trust.short_keys) (splat-bug damage)" "pager trust --repair"
+        }
     } else {
-        & $Warn "trust state: $($trust.error)" "pager trust"
+        & $Warn "trust state: $($trust.error)" "pager trust --repair"
     }
 
     Write-Host ""
@@ -834,7 +1023,10 @@ switch ($cmd) {
     }
     "uninstall" { Invoke-PagerUninstall -Argv $rest }
     "info"      { Invoke-PagerInfo }
-    { $_ -in "doctor", "check" } { Invoke-PagerDoctor }
+    { $_ -in "doctor", "check" } {
+        $fix = ($rest -contains "--fix") -or ($rest -contains "-f")
+        Invoke-PagerDoctor -Fix:$fix
+    }
     { $_ -in "help", "--help", "-h", $null, "" } { Show-Help }
     default {
         Write-Host "Unknown subcommand: $cmd" -ForegroundColor Red
