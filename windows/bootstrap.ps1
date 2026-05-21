@@ -225,7 +225,7 @@ if ($NoAutostart) {
     if (-not $pwshExe) { Die "Neither pwsh nor powershell on PATH (unexpected on Windows)." }
 
     $action = New-ScheduledTaskAction -Execute $pwshExe `
-        -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$PagerBin`" start claude"
+        -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$PagerBin`" start default-boot"
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
     $settings = New-ScheduledTaskSettingsSet `
         -AllowStartIfOnBatteries `

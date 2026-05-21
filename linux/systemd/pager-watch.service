@@ -5,6 +5,6 @@ After=pager.service
 
 [Service]
 Type=oneshot
-ExecStart=__PAGER_ROOT__/bin/pager watchdog claude
+ExecStart=__PAGER_ROOT__/bin/pager watchdog default-boot
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=PAGER_ROOT=__PAGER_ROOT__

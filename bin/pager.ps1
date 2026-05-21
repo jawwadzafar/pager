@@ -708,7 +708,7 @@ function Invoke-PagerAutostart {
             }
             if (-not $pwshExe) { Write-Host "No PowerShell on PATH (unexpected)" -ForegroundColor Red; exit 1 }
             $action = New-ScheduledTaskAction -Execute $pwshExe `
-                -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$PSCommandPath`" start claude"
+                -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$PSCommandPath`" start default-boot"
             $trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
             $settings = New-ScheduledTaskSettingsSet `
                 -AllowStartIfOnBatteries `

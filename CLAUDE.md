@@ -63,12 +63,13 @@ If `False`, re-run `bootstrap.sh` (it's idempotent and fixes this) or set it man
 
 ## How `pager start` works
 
-`pager start [session]` launches `claude --remote-control <session> --dangerously-skip-permissions` inside a detached tmux session. The pane is mirrored to `~/pager/logs/<session>.log` via `tmux pipe-pane`. It's the entry point for `~/.config/systemd/user/pager.service` (oneshot, RemainAfterExit), which the systemd unit invokes as `ExecStart=%h/pager/bin/pager start claude`.
+`pager start [name] [.] [--cwd DIR] [--new]` launches `claude --remote-control <session> --dangerously-skip-permissions` inside a detached tmux session. The pane is mirrored to `~/pager/logs/<session>.log` via `tmux pipe-pane`. It's the entry point for `~/.config/systemd/user/pager.service` (oneshot, RemainAfterExit), which the systemd unit invokes as `ExecStart=%h/pager/bin/pager start default-boot`.
 
 Notes:
 - Linger is enabled (`loginctl enable-linger`), so the service starts at boot before any login.
 - `pager` sources `$PAGER_ROOT/.env` at the top of every invocation, so the spawned `claude` process has `GH_TOKEN` and other env vars available.
-- The session is named `claude` by default. The dispatcher refuses to clobber an existing session.
+- The boot session is named `default-boot` (renamed from the legacy `claude` so `pager status` makes it obvious which session was spawned by systemd). The legacy name still resolves for `pager attach`/`url`/`kill`/`stop` no-arg lookups, so users mid-migration aren't stranded.
+- `pager start` with no name picks a random adjective-noun (e.g. `happy-otter`). Pass an explicit name to override, or `.` to use `$PWD` as the cwd (auto-trusted). `--new` forces a fresh random session even when others are alive. The dispatcher refuses to clobber an existing session.
 - `--remote-control` registers the session with claude.ai. The URL `https://claude.ai/code/session_…` appears in the pane. Fetch it without attaching via `pager url [name|--all]`.
 - To start a session WITHOUT remote-control (e.g. air-gapped, no claude.ai), set `PAGER_NO_REMOTE=1`.
 

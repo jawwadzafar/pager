@@ -88,10 +88,13 @@ Works on anything always-on: a Linux mini-PC under the desk, an old Mac mini in 
 
 ### Want a second session?
 ```bash
-pager start work          # new tmux session named 'work', new remote URL
-pager url work         # get its URL
+pager start work          # new tmux session named 'work' (in $HOME), new remote URL
+pager start work .        # same, but starts in the current directory (auto-trusted)
+pager start .             # random adjective-noun name, current directory
+pager start               # random name, $HOME — or a hint if a session is already alive
+pager url work            # get its URL
 ```
-Each session is independent — separate context, separate URL, separate log at `~/pager/logs/<name>.log`.
+Each session is independent — separate context, separate URL, separate log at `~/pager/logs/<name>.log`. The boot-time session (from systemd / launchd) is named `default-boot` so you can tell at a glance which session was spawned automatically vs. by you.
 
 ---
 
@@ -381,7 +384,7 @@ Attach with `pager attach`. Confirm folder trust on first run (press `1` then En
 
 | Command | What |
 |---|---|
-| `pager start [name]` | Start a detached tmux session named `name` (default: `claude`) running `claude --remote-control <name> --dangerously-skip-permissions`. Idempotent — refuses to clobber an existing session. |
+| `pager start [name] [.] [--cwd DIR] [--new]` | Start a detached tmux session running `claude --remote-control <name> --dangerously-skip-permissions`. With no name, picks a random adjective-noun (e.g. `happy-otter`); `.` uses `$PWD` (auto-trusted); `--cwd DIR` is the explicit form; `--new` forces a fresh random session even if others are alive. The boot session (started by systemd/launchd) is named `default-boot`. Idempotent — refuses to clobber an existing session. |
 | `pager attach [name]` | Attach your terminal to the session. Detach with `Ctrl-b d`. |
 | `pager stop [name|--all]` | Kill one or all `claude*` sessions. |
 | `pager status` | Table of every running session: name, whether Claude is alive, age, Remote Control URL. The single command for "what's up and where do I jump in?" |
@@ -453,7 +456,7 @@ systemctl --user disable --now pager.service
 make watchdog          # installs + enables pager-watch.timer (user-level, 60 s cadence)
 ```
 
-Every minute, it checks whether the Claude process inside the `claude` tmux session is still alive. If dead → kills the stale tmux session and re-launches via `pager start`. If healthy → no-op. Every tick appends a CSV row to `~/pager/logs/watch.csv`:
+Every minute, it checks whether the Claude process inside the `default-boot` tmux session is still alive. If dead → kills the stale tmux session and re-launches via `pager start`. If healthy → no-op. Every tick appends a CSV row to `~/pager/logs/watch.csv`:
 
 ```
 timestamp,session,tmux_alive,claude_pid,rc_banner_seen,age_sec,action

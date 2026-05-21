@@ -76,6 +76,84 @@ except Exception:
 # apps" prompt — the semaphore avoids both problems.
 _pager_stop_file() { printf '%s' "$__PAGER_ROOT/logs/.stopped"; }
 
+# ─── default-session resolution for no-arg attach/url/kill/stop ────────────
+# Prefers the historical default 'claude'. If that's gone but exactly one
+# tmux session is alive, returns its name (so `pager attach` "just works"
+# after `pager start mysession`). Returns empty when zero or 2+ candidates
+# remain — callers decide whether to error or fall back to literal 'claude'.
+_pager_default_session() {
+  # Prefer the boot session ('default-boot'), then the legacy boot name
+  # ('claude' — kept so installs that haven't reloaded the systemd unit
+  # yet still resolve), then fall back to the sole-survivor rule.
+  if tmux has-session -t default-boot 2>/dev/null; then
+    echo default-boot
+    return 0
+  fi
+  if tmux has-session -t claude 2>/dev/null; then
+    echo claude
+    return 0
+  fi
+  local names count
+  names=$(tmux ls 2>/dev/null | awk -F: '{print $1}')
+  count=$(printf '%s\n' "$names" | grep -c . || true)
+  [ "$count" = 1 ] && printf '%s' "$names"
+  # Must return 0 — callers use $(...) under `set -e`, and a non-zero
+  # function exit would short-circuit the caller before it can decide
+  # whether the empty result is an error.
+  return 0
+}
+
+# ─── random session name generator ─────────────────────────────────────────
+# Inline adjective-noun wordlist. ~50x50 = ~2,500 unique combos. On
+# collision with an existing tmux session, retry up to 10 times; then
+# fall back to pager-$RANDOM-$RANDOM. Always exits 0; result is echoed.
+_pager_random_name() {
+  local adjectives=(
+    happy brave calm clever eager fierce gentle jolly kind lively
+    lucky merry noble proud quick quiet smart swift witty zany
+    bright bold cosmic electric frosty golden gritty hidden icy lazy
+    misty mighty plucky rapid rusty silver sleepy snowy sneaky spicy
+    stormy sunny tame tiny tough vivid warm wild wise young
+  )
+  local nouns=(
+    otter falcon river mountain storm tower comet glacier harbor jungle
+    kraken lantern meadow nebula orchard panda quasar raven summit tempest
+    vortex willow badger canyon dolphin ember fjord geyser hawk iris
+    jaguar koala lemur moth narwhal opal parrot quokka rhino sparrow
+    tiger urchin viper walrus yak zebra beacon cypress delta forest
+  )
+  local i name a n
+  for i in $(seq 1 10); do
+    a="${adjectives[$((RANDOM % ${#adjectives[@]}))]}"
+    n="${nouns[$((RANDOM % ${#nouns[@]}))]}"
+    name="${a}-${n}"
+    if ! tmux has-session -t "$name" 2>/dev/null; then
+      printf '%s' "$name"
+      return 0
+    fi
+  done
+  printf 'pager-%s-%s' "$RANDOM" "$RANDOM"
+  return 0
+}
+
+# Print an error+list when the user gave no session name and no sensible
+# default exists. $1 is the verb to suggest in the example ('attach', etc).
+_pager_no_default_error() {
+  local verb="${1:-attach}"
+  local names; names=$(tmux ls 2>/dev/null | awk -F: '{print $1}')
+  if [ -z "$names" ]; then
+    echo "$(red ERROR): no tmux sessions running." >&2
+    echo "" >&2
+    echo "Start one with:    $(bold "pager start")" >&2
+  else
+    local count; count=$(printf '%s\n' "$names" | grep -c . || true)
+    echo "$(red ERROR): no default session 'claude'; $count other session(s) running:" >&2
+    printf '%s\n' "$names" | sed 's/^/  - /' >&2
+    echo "" >&2
+    echo "Pick one with:     $(bold "pager $verb <name>")" >&2
+  fi
+}
+
 # ─── start: launch a session ────────────────────────────────────────────────
 cmd_start() {
   require tmux
@@ -88,18 +166,24 @@ cmd_start() {
   fi
 
   # Parse flags. Positional args before/after flags are tolerated; the first
-  # non-flag positional becomes the session name. Everything after `--` is
-  # passed through to claude as additional args.
+  # non-flag, non-`.` positional becomes the session name. A literal `.`
+  # positional is interpreted as "use the current working directory"
+  # (equivalent to --cwd $PWD). Everything after `--` is passed through to
+  # claude as additional args.
   local cwd="$HOME"
+  local cwd_explicit=0   # was --cwd / `.` given?
   local session=""
+  local force_new=0      # --new bypasses the idempotency hint
   local extra_args=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --cwd)
         shift
         cwd="${1:?--cwd requires a directory argument}"
+        cwd_explicit=1
         ;;
-      --cwd=*) cwd="${1#--cwd=}" ;;
+      --cwd=*) cwd="${1#--cwd=}"; cwd_explicit=1 ;;
+      --new) force_new=1 ;;
       --)
         shift
         while [ $# -gt 0 ]; do extra_args+=("$1"); shift || true; done
@@ -107,23 +191,32 @@ cmd_start() {
         ;;
       -h|--help)
         cat <<EOF
-$(bold "pager start") $(dim "[name] [--cwd DIR] [-- claude-args...]")
+$(bold "pager start") $(dim "[name] [.] [--cwd DIR] [--new] [-- claude-args...]")
 
-  Launch a tmux session running claude. Default session name: claude.
-  Default working directory: \$HOME (which bootstrap pre-trusts).
+  Launch a tmux session running claude.
 
-  $(bold "--cwd DIR")   start claude in DIR instead of \$HOME, and auto-trust DIR
-              (writes the trust flag to ~/.claude.json so claude doesn't
-              hang on its "Trust this folder?" prompt).
+  $(bold "name")         session name (omit → random adjective-noun, e.g. happy-otter)
+  $(bold ".")            use \$PWD as the working directory (auto-trusted)
+  $(bold "--cwd DIR")   explicit working directory, auto-trusts DIR
+  $(bold "--new")       force a fresh random-named session even if one is alive
+
+  Default cwd: \$HOME. Boot-time session (from systemd) is named 'default-boot'.
 
   Examples:
-    pager start                         # default session in \$HOME
-    pager start work --cwd ~/code/proj  # 'work' session in that dir
-    pager start -- --some-claude-flag   # pass extra args to claude
+    pager start                            # random session in \$HOME (or hint if alive)
+    pager start .                          # random session in current dir
+    pager start work .                     # session 'work' in current dir
+    pager start work --cwd ~/code/proj     # session 'work' in that dir
+    pager start --new                      # force a fresh random session in \$HOME
+    pager start -- --some-claude-flag      # pass extra args to claude
 EOF
         return 0
         ;;
       -*) err "Unknown option: $1  (try: pager start --help)" ;;
+      .)
+        cwd="$PWD"
+        cwd_explicit=1
+        ;;
       *)
         if [ -z "$session" ]; then
           session="$1"
@@ -134,7 +227,28 @@ EOF
     esac
     shift
   done
-  session="${session:-claude}"
+
+  # Name resolution:
+  #   - explicit name → use it
+  #   - no name + (--new OR explicit cwd via . / --cwd) → random
+  #   - no name + a tmux session alive → idempotency hint, exit 0
+  #   - no name otherwise → random
+  # The `.` / `--cwd` / `--new` cases all bypass the idempotency hint because
+  # each is an explicit "I want a fresh session" signal.
+  if [ -z "$session" ]; then
+    if [ "$force_new" = 0 ] && [ "$cwd_explicit" = 0 ] && tmux ls 2>/dev/null | grep -q .; then
+      echo "$(bold "Existing pager-managed tmux sessions:")"
+      tmux ls 2>/dev/null | awk -F: '{print "  - "$1}'
+      echo ""
+      echo "$(dim "To spawn another, be explicit:")"
+      echo "  pager start <name>     $(dim "(named, \$HOME)")"
+      echo "  pager start .          $(dim "(random, \$PWD)")"
+      echo "  pager start <name> .   $(dim "(named, \$PWD)")"
+      echo "  pager start --new      $(dim "(random, \$HOME)")"
+      return 0
+    fi
+    session=$(_pager_random_name)
+  fi
 
   # Normalize cwd to an absolute path. If the dir doesn't exist, error early
   # rather than letting tmux silently fall back to $HOME.
@@ -185,18 +299,35 @@ EOF
   tmux new-session -d -s "$session" -c "$cwd" \
     "$claude_cmd; echo; echo '[claude exited — tmux session kept; run claude to relaunch]'; exec bash"
   tmux pipe-pane -t "$session":0.0 -o "cat >> '$log'"
+  # Mouse mode on: wheel scrolls the tmux scrollback instead of being
+  # translated to arrow keys (which Claude Code's TUI warns about with
+  # "scroll wheel is sending arrow keys"). Per-session, no -g, so it
+  # doesn't leak into the user's other tmux sessions on this server.
+  tmux set-option -t "$session" mouse on >/dev/null 2>&1 || true
 
   echo "Started session '$session'."
   echo "  cwd:    $cwd  $(dim "(pre-trusted)")"
   echo "  Attach: pager attach $session"
   echo "  Log:    $log"
   echo "  URL:    pager url $session"
+  echo "  Mouse:  $(dim "wheel scrolls tmux history; hold Shift for native copy/paste")"
 }
 
 # ─── attach: attach terminal to a session ──────────────────────────────────
 cmd_attach() {
   require tmux
-  local session="${1:-claude}"
+  local session="${1-}"
+  if [ -z "$session" ]; then
+    session=$(_pager_default_session)
+    if [ -z "$session" ]; then
+      _pager_no_default_error attach
+      return 1
+    fi
+    case "$session" in
+      default-boot|claude) ;;
+      *) echo "No 'default-boot' session; attaching to '$session' (only active session)." >&2 ;;
+    esac
+  fi
   if ! tmux has-session -t "$session" 2>/dev/null; then
     echo "$(red ERROR): no tmux session named '$session'." >&2
     echo "" >&2
@@ -226,7 +357,21 @@ cmd_stop() {
     nuke_watchdog=1
     session="(all)"
   else
-    session="${1:-claude}"
+    session="${1-}"
+    if [ -z "$session" ]; then
+      session=$(_pager_default_session)
+      if [ -z "$session" ]; then
+        # No 'default-boot', no 'claude', no sole survivor — still set the
+        # stop semaphore so the watchdog won't respawn anything; fall back
+        # to 'default-boot' for the "no session running" message below.
+        session=default-boot
+      else
+        case "$session" in
+          default-boot|claude) ;;
+          *) echo "No 'default-boot' session; stopping '$session' (only active session)." >&2 ;;
+        esac
+      fi
+    fi
     mkdir -p "$__PAGER_ROOT/logs"
     touch "$(_pager_stop_file)"
     if tmux has-session -t "$session" 2>/dev/null; then
@@ -697,7 +842,18 @@ cmd_kill() {
     echo "(Watchdog still active — sessions will be respawned at next tick. Use 'pager stop' to keep them down.)"
     return 0
   fi
-  local session="${1:-claude}"
+  local session="${1-}"
+  if [ -z "$session" ]; then
+    session=$(_pager_default_session)
+    if [ -z "$session" ]; then
+      _pager_no_default_error kill
+      return 1
+    fi
+    case "$session" in
+      default-boot|claude) ;;
+      *) echo "No 'default-boot' session; killing '$session' (only active session)." >&2 ;;
+    esac
+  fi
   if tmux has-session -t "$session" 2>/dev/null; then
     tmux kill-session -t "$session"
     echo "Killed session '$session'. (Watchdog will respawn at next tick.)"
@@ -720,14 +876,14 @@ cmd_restart() {
     _watchdog_disable >/dev/null 2>&1 || true
     sleep 1
     rm -f "$(_pager_stop_file)" 2>/dev/null || true
-    cmd_start claude
+    cmd_start default-boot
     if _watchdog_enable >/dev/null 2>&1; then
       echo "Watchdog reloaded."
     fi
     echo "Restarted (all sessions + watchdog)."
     return 0
   fi
-  local session="${1:-claude}"
+  local session="${1:-default-boot}"
   if tmux has-session -t "$session" 2>/dev/null; then
     tmux kill-session -t "$session"
     echo "Killed: $session"
@@ -802,7 +958,19 @@ cmd_url() {
     fi
     tmux ls 2>/dev/null | awk -F: '{print $1}' | while read -r s; do url_for "$s"; done
   else
-    url_for "${1:-claude}"
+    local session="${1-}"
+    if [ -z "$session" ]; then
+      session=$(_pager_default_session)
+      if [ -z "$session" ]; then
+        _pager_no_default_error url
+        return 1
+      fi
+      case "$session" in
+        default-boot|claude) ;;
+        *) echo "No 'default-boot' session; showing '$session' (only active session)." >&2 ;;
+      esac
+    fi
+    url_for "$session"
   fi
 }
 
@@ -823,7 +991,7 @@ cmd_url() {
 #     (it could just have scrolled off the captured window). Once watch.csv
 #     captures real expiry events, refine the policy.
 cmd_watchdog() {
-  local session="${1:-claude}"
+  local session="${1:-default-boot}"
 
   local csv="$__PAGER_ROOT/logs/watch.csv"
   mkdir -p "$(dirname "$csv")"

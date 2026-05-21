@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Random adjective-noun session names.** Bare `pager start` (no name) now picks
+  from an inline 50×50 wordlist (e.g. `happy-otter`, `frosty-canyon`) instead of
+  defaulting to a hardcoded `claude` name. Collisions retry up to 10 times,
+  then fall back to `pager-$RANDOM-$RANDOM`.
+- **`pager start .` shorthand.** A literal `.` in the positional args sets the
+  cwd to `$PWD` and auto-trusts it. Works with or without an explicit name:
+  `pager start .` (random + cwd), `pager start work .` (named + cwd).
+- **`pager start --new` flag.** Forces a fresh random-named session even when
+  others are alive. Skips the new idempotency hint.
+- **Idempotency hint on bare `pager start`.** When at least one tmux session
+  is alive and the user didn't pass a name, `.`, or `--new`, pager now lists
+  the existing sessions and the three ways to spawn another, then exits 0
+  instead of silently double-spawning.
+- **Per-session tmux mouse mode.** New sessions are created with
+  `tmux set-option -t <name> mouse on` so the scroll wheel scrolls the pane
+  history instead of sending arrow keys. (Claude Code's TUI was warning
+  "scroll wheel is sending arrow keys" inside attached panes.) Per-session
+  scope — doesn't leak into the user's other tmux sessions on the same server.
+
+### Changed
+
+- **Boot-time session renamed to `default-boot`** (from `claude`). Makes it
+  obvious in `pager status` which session was spawned by systemd/launchd vs.
+  by the user. The legacy `claude` name still resolves for `pager attach`,
+  `url`, `kill`, and `stop` when no arg is given, so installs that haven't
+  reloaded the unit aren't stranded.
+- **Smarter no-arg defaults for `attach`/`url`/`kill`/`stop`.** When the
+  preferred boot session is missing but exactly one tmux session is alive,
+  the bare commands now target it (with an announce line) instead of erroring
+  out. When 2+ unrelated sessions are running, the error lists them with a
+  `Pick one with: pager <verb> <name>` hint instead of just suggesting
+  `pager start`.
+
 ## [0.7.0-alpha-4] — 2026-05-20
 
 Fourth alpha: closes the workspace-trust hole on Windows. Three compounding
