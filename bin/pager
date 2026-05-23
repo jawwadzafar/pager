@@ -122,8 +122,8 @@ _pager_random_name() {
     jaguar koala lemur moth narwhal opal parrot quokka rhino sparrow
     tiger urchin viper walrus yak zebra beacon cypress delta forest
   )
-  local i name a n
-  for i in $(seq 1 10); do
+  local name a n _i
+  for _i in $(seq 1 10); do
     a="${adjectives[$((RANDOM % ${#adjectives[@]}))]}"
     n="${nouns[$((RANDOM % ${#nouns[@]}))]}"
     name="${a}-${n}"
@@ -237,10 +237,10 @@ EOF
   # each is an explicit "I want a fresh session" signal.
   if [ -z "$session" ]; then
     if [ "$force_new" = 0 ] && [ "$cwd_explicit" = 0 ] && tmux ls 2>/dev/null | grep -q .; then
-      echo "$(bold "Existing pager-managed tmux sessions:")"
+      printf '%s\n' "$(bold "Existing pager-managed tmux sessions:")"
       tmux ls 2>/dev/null | awk -F: '{print "  - "$1}'
       echo ""
-      echo "$(dim "To spawn another, be explicit:")"
+      printf '%s\n' "$(dim "To spawn another, be explicit:")"
       echo "  pager start <name>     $(dim "(named, \$HOME)")"
       echo "  pager start .          $(dim "(random, \$PWD)")"
       echo "  pager start <name> .   $(dim "(named, \$PWD)")"

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0-alpha-5] — 2026-05-23
+
+Fifth alpha: session ergonomics pass. Random adjective-noun names, `.` as
+a cwd shorthand, per-session tmux mouse mode (kills the "scroll wheel is
+sending arrow keys" banner), and the boot session is renamed from
+`claude` to `default-boot` so `pager status` makes clear which session
+came from systemd/launchd vs. the user. Smart no-arg defaults for
+`attach`/`url`/`kill`/`stop`: target the sole running session when the
+boot session is missing, and list candidates when there are multiple.
+
 ### Added
 
 - **Random adjective-noun session names.** Bare `pager start` (no name) now picks
